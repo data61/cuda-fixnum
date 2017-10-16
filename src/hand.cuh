@@ -1,7 +1,7 @@
 #ifndef CUDA_MPMA_HAND_CUH
 #define CUDA_MPMA_HAND_CUH
 
-#include "utils.h"
+#include "utils.cuh"
 
 /*
  * A "hand" encapsulates our notion of a fixed collection of digits in
@@ -13,7 +13,45 @@
  * utilisation always handle carries" implementation, a "avoid carries
  * with nail bits" implementation, as well as more exotic
  * implementations using floating-point registers.
+ *
+ * A limb is an array of digits stored in memory. Chunks of digits are
+ * loaded into hands in order for arithmetic to be performed on
+ * numbers. So a limb can be thought of as a sequence of hands.
+ *
+ * The interface to hands and the interface to limbs is (largely) the
+ * same. The interface for limbs is defined in terms of the one for
+ * hands.
  */
+
+template< typename T >
+class digit {
+    T d;
+public:
+    //  +=  +  -  <<  >>  &=
+    //  <  >
+
+    digit add(const digit x);
+    digit sub(const digit x);
+    digit neg();
+    digit mulwide(const digit x);
+    digit mullo(const digit x);
+    digit mulhi(const digit x);
+
+    // multiply-by-zero-or-one
+    digit keep_or_kill(int x);
+};
+
+
+template< typename digit, int width = warpSize >
+class hand {
+    digit d;
+
+public:
+    //  +=  +  -  <<  >>  &=
+    //  <  >
+
+    // multiply-by-zero-or-one
+};
 
 template< typename digit, digit DIGIT_MAX = ~(digit)0 >
 __device__ int
