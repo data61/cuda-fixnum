@@ -186,11 +186,6 @@ struct subwarp_data
     static __device__ __forceinline__
     int
     offset() {
-        // FIXME: Surely this achieves nothing, since threadIdx.x <
-        // 32, and warpSize - 1 is just 31 (= all 1 bits). threadIdx.x
-        // *is* the thread index in the full warp! Actually,
-        // threadIdx.x is frequently bigger than warpSize...
-        //
         // Thread index within the (full) warp.
         int T = threadIdx.x & (warpSize - 1);
 
