@@ -61,8 +61,8 @@ hand_resolve_cy(digit &r, int cy)
     uint32_t allcarries, p, g;
     int cy_hi;
 
-    g = __ballot(cy);                         // carry generate
-    p = __ballot(r == DIGIT_MAX);             // carry propagate
+    g = ballot(cy);                           // carry generate
+    p = ballot(r == DIGIT_MAX);               // carry propagate
     allcarries = (p | g) + g;                 // propagate all carries
     cy_hi = allcarries < g;                   // detect final overflow
     allcarries = (allcarries ^ p) | (g << 1); // get effective carries
@@ -142,10 +142,10 @@ hand_resolve_nails(digit &r)
 
     int nail, nail_hi;
     nail = hand_extract_nail<digit, NAIL_BITS>(r);
-    nail_hi = __shfl(nail, T, width);
+    nail_hi = shfl(nail, T, width);
 
     // Without branching: nail = __shfl_up(nail, 1, width) & -(L > 0);
-    nail = __shfl_up(nail, 1, width);
+    nail = shfl_up(nail, 1, width);
     nail = (L > 0) ? nail : 0;
     r += nail;
 

@@ -1,6 +1,10 @@
 #ifndef CUDA_MPMA_UTILS_CUH
 #define CUDA_MPMA_UTILS_CUH
 
+/*
+ * PTX Assembler primitives
+ */
+
 // TODO: Understand circumstances in which I might want to make this
 // "#define ASM asm __volatile__".
 //#define ASM asm
@@ -15,6 +19,14 @@ umul(uint32_t &hi, uint32_t &lo, uint32_t a, uint32_t b)
          " mov.b64 { %0, %1 }, tmp;\n\t"
          "}"
          : "=r"(hi), "=r"(lo)
+         : "r"(a), "r"(b));
+}
+
+__device__ __forceinline__ void
+umul(uint64_t &r, uint32_t a, uint32_t b)
+{
+    asm (" mul.wide.u32 %0, %1, %2;"
+         : "=l"(r)
          : "r"(a), "r"(b));
 }
 
@@ -187,15 +199,46 @@ subwarpMask(int width)
 }
 
 /*
- * Like the built in __ballot(tst) but restrict the result to the
- * containing subwarp of size width.
+ * Wrapper for notation consistency.
  */
-__device__ uint32_t
+__device__ __forceinline__ uint32_t
+ballot(int tst)
+{
+    return __ballot(tst);
+}
+
+/*
+ * Like ballot(tst) but restrict the result to the containing subwarp
+ * of size width.
+ */
+__device__ __forceinline__ uint32_t
 ballot(int tst, int width)
 {
     uint32_t b = __ballot(tst);
     b >>= subwarpOffset(width);
     return b & subwarpMask(width);
+}
+
+
+/*
+ * Wrappers for notation consistency.
+ */
+__device__ __forceinline__ uint32_t
+shfl(const uint32_t var, int srcLane, int width)
+{
+    return __shfl(var, srcLane, width);
+}
+
+__device__ __forceinline__ void
+shfl_up(uint32_t &var, unsigned int delta, int width)
+{
+    return __shfl_up(var, delta, width);
+}
+
+__device__ __forceinline__ void
+shfl_down(uint32_t &var, unsigned int delta, int width)
+{
+    return __shfl_down(var, delta, width);
 }
 
 /*
