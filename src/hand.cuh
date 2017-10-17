@@ -23,22 +23,23 @@
  * hands.
  */
 
-template< typename T >
-class digit {
-    T d;
+class number {
 public:
     //  +=  +  -  <<  >>  &=
     //  <  >
 
-    digit add(const digit x);
-    digit sub(const digit x);
-    digit neg();
-    digit mulwide(const digit x);
-    digit mullo(const digit x);
-    digit mulhi(const digit x);
+    number add(const number x, const number y);
+    number sub(const number x);
+    number neg();
+    number mulwide(const number x);
+    number mullo(const number x);
+    number mulhi(const number x);
+
+    int lt(number x, number y);
+    int gt(number x, number y);
 
     // multiply-by-zero-or-one
-    digit keep_or_kill(int x);
+    number keep_or_kill(int x);
 };
 
 
