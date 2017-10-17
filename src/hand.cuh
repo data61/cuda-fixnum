@@ -224,7 +224,7 @@ hand_mullo_nail(digit &r, digit a, digit b)
             umad_hi(r, aa, b, r);
             shfl_up(r, 1, WIDTH);
             // r = (L > 0) ? r : 0;
-            r &= (digit) -(L > 0);  // TODO: Cast is probably unnecessary
+            r &= -(digit) (L > 0);  // TODO: Cast is probably unnecessary
             umad_lo(r, aa, b, r);
         }
         // FIXME: Supposed to shuffle up n by NAIL_BITS digits
