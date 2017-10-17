@@ -130,158 +130,193 @@ umad_hi_cc(uint64_t &lo, uint64_t &cy, uint64_t a, uint64_t b, uint64_t c)
  * (=warpSize).
  */
 
-/*
- * Return the lane index within the subwarp.
- *
- * The lane index is the thread index modulo the width of the subwarp.
- * width must divide warpSize (= 32) and be at least 2.
- */
-__device__ __forceinline__ int
-laneIdx(int width = warpSize)
+template<int width = warpSize>
+struct subwarp_data
 {
-    assert(width > 1 && !(warpSize & (width - 1)));
-    // threadIdx.x % width = threadIdx.x & (width - 1) since width = 2^n
-    return threadIdx.x & (width - 1);
-}
 
-/*
- * Return the lane index and the top lane of the current subwarp.
- *
- * The top lane of a subwarp is the one with index width - 1.
- */
-__device__ void
-laneIdx_and_topLane(int &L, int &T, int width)
-{
-    T = width - 1;
-    L = threadIdx.x & T;
-}
+    // width must divide warpSize (= 32) and be at least 2.
+    static_assert(width > 1 && !(warpSize & (width - 1)));
 
-/*
- * Return the thread index within the warp where the subwarp
- * containing this lane begins.  Examples:
- *
- * - width 16: subwarp offset is 0 for threads 0-15, and 16 for
- *    threads 16-31
- *
- * - width 8: subwarp offset is 0 for threads 0-7, 8 for threads 8-15,
- *    16 for threads 16-23, and 24 for threads 24-31.
- *
- * The subwarp offset at thread T in a subwarp of width w is given by
- * floor(T/w)*w.
- *
- * Useful in conjunction with subwarpMask() and __ballot().
- */
-__device__ __forceinline__ int
-subwarpOffset(int width)
-{
-    // Thread index within the (full) warp.
-    int T = threadIdx.x & (warpSize - 1);
+    /*
+     * Return the lane index within the subwarp.
+     *
+     * The lane index is the thread index modulo the width of the subwarp.
+     */
+    static __device__ __forceinline__
+    int
+    laneIdx() {
+        // threadIdx.x % width = threadIdx.x & (width - 1) since width = 2^n
+        return threadIdx.x & (width - 1);
 
-    // Recall: x mod y = x - y*floor(x/y), so
-    //
-    //   subwarpOffset = width * floor(threadIdx/width)
-    //                 = threadIdx - (threadIdx % width)
-    //                 = threadIdx - (threadIdx & (width - 1))
-    //
-    // since width = 2^n.
-    return T - (T & (width - 1));
-}
+        // TODO: Replace above with?
+        // int L;
+        // asm ("mov.b32 %0, %laneid;" : "=r"(L));
+        // return L;
+    }
 
-/*
- * Return a mask which selects the first width bits of a number.
- *
- * Useful in conjunction with subwarpOffset() and __ballot().
- */
-__device__ __forceinline__ uint32_t
-subwarpMask(int width)
-{
-    return (1UL << width) - 1UL;
-}
+    /*
+     * Index of the top lane of the current subwarp.
+     *
+     * The top lane of a subwarp is the one with index width - 1.
+     */
+    constexpr int toplaneIdx = width - 1;
 
-/*
- * Wrapper for notation consistency.
- */
-__device__ __forceinline__ uint32_t
-ballot(int tst)
-{
-    return __ballot(tst);
-}
+    /*
+     * Mask which selects the first width bits of a number.
+     *
+     * Useful in conjunction with offset() and __ballot().
+     */
+    constexpr uint32_t mask = (1UL << width) - 1UL;
 
-/*
- * Like ballot(tst) but restrict the result to the containing subwarp
- * of size width.
- */
-__device__ __forceinline__ uint32_t
-ballot(int tst, int width)
-{
-    uint32_t b = __ballot(tst);
-    b >>= subwarpOffset(width);
-    return b & subwarpMask(width);
-}
+    /*
+     * Return the thread index within the warp where the subwarp
+     * containing this lane begins.  Examples:
+     *
+     * - width 16: subwarp offset is 0 for threads 0-15, and 16 for
+     *    threads 16-31
+     *
+     * - width 8: subwarp offset is 0 for threads 0-7, 8 for threads 8-15,
+     *    16 for threads 16-23, and 24 for threads 24-31.
+     *
+     * The subwarp offset at thread T in a subwarp of width w is given by
+     * floor(T/w)*w.
+     *
+     * Useful in conjunction with mask() and __ballot().
+     */
+    static __device__ __forceinline__
+    int
+    offset() {
+        // FIXME: Surely this achieves nothing, since threadIdx.x <
+        // 32, and warpSize - 1 is just 31 (= all 1 bits). threadIdx.x
+        // *is* the thread index in the full warp! Actually,
+        // threadIdx.x is frequently bigger than warpSize...
+        //
+        // Thread index within the (full) warp.
+        int T = threadIdx.x & (warpSize - 1);
 
+        // Recall: x mod y = x - y*floor(x/y), so
+        //
+        //   subwarpOffset = width * floor(threadIdx/width)
+        //                 = threadIdx - (threadIdx % width)
+        //                 = threadIdx - (threadIdx & (width - 1))
+        //
+        // since width = 2^n.
+        return T - (T & (width - 1));
+    }
 
-/*
- * Wrappers for notation consistency.
- */
-__device__ __forceinline__ uint32_t
-shfl(const uint32_t var, int srcLane, int width)
-{
-    return __shfl(var, srcLane, width);
-}
+#if 0
+    // TODO: Check if it is worth putting this in a specialisation of
+    // width = warpSize. Note that, in the implementation below,
+    // subwarpMask() will be a compile-time constant of 0xfff... so
+    // the '&' instruction will be removed; however it's not clear
+    // that the compiler will work out that subwarpOffset()
+    // is always 0 when width = warpSize.
+    /*
+     * Wrapper for notation consistency.
+     */
+    static __device__ __forceinline__
+    uint32_t
+    ballot(int tst) {
+        return __ballot(tst);
+    }
+#endif
 
-__device__ __forceinline__ void
-shfl_up(uint32_t &var, unsigned int delta, int width)
-{
-    return __shfl_up(var, delta, width);
-}
+    /*
+     * Like ballot(tst) but restrict the result to the containing subwarp
+     * of size width.
+     */
+    static __device__ __forceinline__
+    uint32_t
+    ballot(int tst) {
+        uint32_t b = __ballot(tst);
+        b >>= offset();
+        return b & mask;
+    }
 
-__device__ __forceinline__ void
-shfl_down(uint32_t &var, unsigned int delta, int width)
-{
-    return __shfl_down(var, delta, width);
-}
+    /*
+     * Wrappers for notation consistency.
+     */
+    static __device__ __forceinline__
+    uint32_t
+    shfl(const uint32_t var, int srcLane) {
+        return __shfl(var, srcLane, width);
+    }
 
-/*
- * The next three functions extend the usual shuffle functions to 64bit
- * parameters.  See CUDA C Programming Guide, B.14:
- *
- *   http://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#warp-shuffle-functions
- */
-__device__ uint64_t
-shfl(const uint64_t &var, int srcLane, int width)
-{
-    int hi, lo;
-    uint64_t res;
+    /*
+     * Sets bottom variable to zero.
+     */
+    static __device__ __forceinline__
+    uint32_t
+    shfl_up0(uint32_t var, unsigned int delta) {
+        uint32_t res = __shfl_up(var, delta, width);
+        //return res & -(uint32_t)(laneIdx() > 0);
+        return laneIdx() > 0 ? res : 0;
+    }
 
-    asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
-    hi = __shfl(hi, srcLane, width);
-    lo = __shfl(lo, srcLane, width);
-    asm("mov.b64 %0, { %1, %2 };" : "=l"(res) : "r"(lo), "r"(hi));
-    return res;
-}
+    /*
+     * Sets top variable to zero.
+     */
+    static __device__ __forceinline__
+    uint32_t
+    shfl_down0(uint32_t var, unsigned int delta) {
+        uint32_t res = __shfl_down(var, delta, width);
+        //return res & -(uint32_t)(laneIdx() < toplaneIdx());
+        return laneIdx() < toplaneIdx ? res : 0;
+    }
 
-__device__ void
-shfl_up(uint64_t &var, unsigned int delta, int width)
-{
-    int hi, lo;
+    /*
+     * The next three functions extend the usual shuffle functions to 64bit
+     * parameters.  See CUDA C Programming Guide, B.14:
+     *
+     *   http://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#warp-shuffle-functions
+     */
+    static __device__ __forceinline__
+    uint64_t
+    shfl(const uint64_t &var, int srcLane) {
+        int hi, lo;
+        uint64_t res;
 
-    asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
-    hi = __shfl_up(hi, delta, width);
-    lo = __shfl_up(lo, delta, width);
-    asm("mov.b64 %0, { %1, %2 };" : "=l"(var) : "r"(lo), "r"(hi));
-}
+        asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
+        hi = __shfl(hi, srcLane, width);
+        lo = __shfl(lo, srcLane, width);
+        asm("mov.b64 %0, { %1, %2 };" : "=l"(res) : "r"(lo), "r"(hi));
 
-__device__ void
-shfl_down(uint64_t &var, unsigned int delta, int width)
-{
-    int hi, lo;
+        return res;
+    }
 
-    asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
-    hi = __shfl_down(hi, delta, width);
-    lo = __shfl_down(lo, delta, width);
-    asm("mov.b64 %0, { %1, %2 };" : "=l"(var) : "r"(lo), "r"(hi));
-}
+    static __device__ __forceinline__
+    uint64_t
+    shfl_up0(uint64_t var, unsigned int delta) {
+        int hi, lo;
+        uint64_t res;
 
+        asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
+        hi = __shfl_up(hi, delta, width);
+        lo = __shfl_up(lo, delta, width);
+        asm("mov.b64 %0, { %1, %2 };" : "=l"(res) : "r"(lo), "r"(hi));
+
+        //return res & -(uint64_t)(laneIdx() > 0);
+        return laneIdx() > 0 ? res : 0;
+    }
+
+    static __device__ __forceinline__
+    void
+    shfl_down0(uint64_t &var, unsigned int delta) {
+        int hi, lo;
+        uint64_t res;
+
+        asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
+        hi = __shfl_down(hi, delta, width);
+        lo = __shfl_down(lo, delta, width);
+        asm("mov.b64 %0, { %1, %2 };" : "=l"(res) : "r"(lo), "r"(hi));
+
+        //return res & -(uint64_t)(laneIdx() < toplaneIdx());
+        return laneIdx() < toplaneIdx ? res : 0;
+    }
+
+private:
+    subwarp();
+};
 
 
 #endif

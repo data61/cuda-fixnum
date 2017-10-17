@@ -78,7 +78,7 @@ __device__ int
 hand_add_cy(digit &r, digit a, digit b)
 {
     int cy;
-    
+
     r = a + b;
     cy = r < a;
 
@@ -127,8 +127,8 @@ hand_extract_nail(digit &r)
 
 
 /*
- * Current cost of nail resolution is 4 vote functions. 
- */ 
+ * Current cost of nail resolution is 4 vote functions.
+ */
 template< typename digit, int NAIL_BITS >
 __device__ int
 hand_resolve_nails(digit &r)
@@ -137,17 +137,13 @@ hand_resolve_nails(digit &r)
     constexpr int width = warpSize;
     // TODO: This is ugly
     typedef nail_data<digit, NAIL_BITS> nd;
-
-    int L, T;
-    laneIdx_and_topLane(L, T, width);
+    typedef subwarp_data<WIDTH> subwarp;
 
     int nail, nail_hi;
     nail = hand_extract_nail<digit, NAIL_BITS>(r);
-    nail_hi = shfl(nail, T, width);
+    nail_hi = subwarp::shfl(nail, subwarp::toplaneIdx);
 
-    // Without branching: nail = __shfl_up(nail, 1, width) & -(L > 0);
-    nail = shfl_up(nail, 1, width);
-    nail = (L > 0) ? nail : 0;
+    nail = subwarp::shfl_up0(nail, 1);
     r += nail;
 
     // nail is 0 or 1 this time
@@ -167,7 +163,8 @@ template< typename digit, int WIDTH = warpSize >
 __device__ void
 hand_mullo_cy(digit &r, digit a, digit b)
 {
-    int L = laneIdx(WIDTH);
+    typedef subwarp_data<WIDTH> subwarp;
+
     // TODO: This should be smaller, probably uint16_t (smallest
     // possible for addition).  Strangely, the naive translation to
     // the smaller size broke; to investigate.
@@ -175,25 +172,15 @@ hand_mullo_cy(digit &r, digit a, digit b)
 
     r = 0;
     for (int i = WIDTH - 1; i >= 0; --i) {
-        digit aa = shfl(a, i, WIDTH);
+        digit aa = subwarp::shfl(a, i);
 
         // TODO: See if using umad.wide improves this.
         umad_hi_cc(r, cy, aa, b, r);
-        shfl_up(r, 1, WIDTH);
-        shfl_up(cy, 1, WIDTH);
-        // TODO: enable the trick below when comparison with old
-        // version is done
-#if 0
-        // r = (L > 0) ? r : 0;
-        r &= (digit) -(L > 0);  // TODO: Cast is probably unnecessary
-        // cy = (L > 0) ? cy : 0;
-        cy &= (digit) -(L > 0);  // TODO: Cast is probably unnecessary
-#endif
-        r = (L == 0) ? 0 : r;
-        cy = (L == 0) ? 0 : cy;
+        r = subwarp::shfl_up0(r, 1);
+        cy = subwarp::shfl_up0(cy, 1);
         umad_lo_cc(r, cy, aa, b, r);
     }
-    shfl_up(cy, 1, WIDTH);
+    cy = subwarp::shfl_up0(cy, 1);
     (void) hand_add_cy(r, r, cy); // FIXME: Should take a WIDTH
 }
 
@@ -207,7 +194,8 @@ hand_mullo_nail(digit &r, digit a, digit b)
     // FIXME: also need to check that digit has enough space for the
     // accumulated nails.
 
-    int L = laneIdx(WIDTH);
+    typedef subwarp_data<WIDTH> subwarp;
+
     digit n = 0; // nails
 
     r = 0;
@@ -218,20 +206,18 @@ hand_mullo_nail(digit &r, digit a, digit b)
         // so overflow is likely in the first case and unlikely in the
         // second...
         for (int j = 0; j < NAIL_BITS; ++j, --i) {
-            digit aa = shfl(a, i, WIDTH);
+            digit aa = subwarp::shfl(a, i);
 
             // TODO: See if using umad.wide improves this.
             umad_hi(r, aa, b, r);
-            shfl_up(r, 1, WIDTH);
-            // r = (L > 0) ? r : 0;
-            r &= -(digit) (L > 0);  // TODO: Cast is probably unnecessary
+            r = subwarp::shfl_up0(r, 1);
             umad_lo(r, aa, b, r);
         }
         // FIXME: Supposed to shuffle up n by NAIL_BITS digits
         // too. Can this be avoided?
         n += hand_extract_nails(r);
     }
-    shfl_up(n, 1, WIDTH);
+    n = subwarp::shfl_up0(n, 1);
     hand_add(r, r, n);
     hand_resolve_nails(r);
 }
