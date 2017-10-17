@@ -239,26 +239,16 @@ struct subwarp_data
         return __shfl(var, srcLane, width);
     }
 
-    /*
-     * Sets bottom variable to zero.
-     */
     static __device__ __forceinline__
     uint32_t
-    shfl_up0(uint32_t var, unsigned int delta) {
-        uint32_t res = __shfl_up(var, delta, width);
-        //return res & -(uint32_t)(laneIdx() > 0);
-        return laneIdx() > 0 ? res : 0;
+    shfl_up(uint32_t var, unsigned int delta) {
+        return __shfl_up(var, delta, width);
     }
 
-    /*
-     * Sets top variable to zero.
-     */
     static __device__ __forceinline__
     uint32_t
-    shfl_down0(uint32_t var, unsigned int delta) {
-        uint32_t res = __shfl_down(var, delta, width);
-        //return res & -(uint32_t)(laneIdx() < toplaneIdx());
-        return laneIdx() < toplaneIdx ? res : 0;
+    shfl_down(uint32_t var, unsigned int delta) {
+        return __shfl_down(var, delta, width);
     }
 
     /*
@@ -270,44 +260,63 @@ struct subwarp_data
     static __device__ __forceinline__
     uint64_t
     shfl(const uint64_t &var, int srcLane) {
-        int hi, lo;
         uint64_t res;
+        uint32_t hi, lo;
 
         asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
-        hi = __shfl(hi, srcLane, width);
-        lo = __shfl(lo, srcLane, width);
+        hi = shfl(hi, srcLane, width);
+        lo = shfl(lo, srcLane, width);
         asm("mov.b64 %0, { %1, %2 };" : "=l"(res) : "r"(lo), "r"(hi));
-
         return res;
     }
 
     static __device__ __forceinline__
     uint64_t
-    shfl_up0(uint64_t var, unsigned int delta) {
-        int hi, lo;
+    shfl_up(uint64_t var, unsigned int delta) {
         uint64_t res;
+        uint32_t hi, lo;
 
         asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
-        hi = __shfl_up(hi, delta, width);
-        lo = __shfl_up(lo, delta, width);
+        hi = shfl_up(hi, delta, width);
+        lo = shfl_up(lo, delta, width);
         asm("mov.b64 %0, { %1, %2 };" : "=l"(res) : "r"(lo), "r"(hi));
-
-        //return res & -(uint64_t)(laneIdx() > 0);
-        return laneIdx() > 0 ? res : 0;
+        return res;
     }
 
     static __device__ __forceinline__
-    void
-    shfl_down0(uint64_t &var, unsigned int delta) {
-        int hi, lo;
+    uint64_t
+    shfl_down(uint64_t var, unsigned int delta) {
         uint64_t res;
+        uint32_t hi, lo;
 
         asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
-        hi = __shfl_down(hi, delta, width);
-        lo = __shfl_down(lo, delta, width);
+        hi = shfl_down(hi, delta, width);
+        lo = shfl_down(lo, delta, width);
         asm("mov.b64 %0, { %1, %2 };" : "=l"(res) : "r"(lo), "r"(hi));
+        return res;
+    }
 
-        //return res & -(uint64_t)(laneIdx() < toplaneIdx());
+    /*
+     * Like shfl_up but set bottom variable to zero.
+     */
+    template< typename T >
+    static __device__ __forceinline__
+    T
+    shfl_up0(T var, unsigned int delta) {
+        T res = shfl_up(var, delta);
+        //return res & -(T)(laneIdx() > 0);
+        return laneIdx() > 0 ? res : 0;
+    }
+
+    /*
+     * Like shfl_down but set top variable to zero.
+     */
+    template< typename T >
+    static __device__ __forceinline__
+    T
+    shfl_down0(T var, unsigned int delta) {
+        T res = shfl_down(var, delta);
+        //return res & -(T)(laneIdx() < toplaneIdx());
         return laneIdx() < toplaneIdx ? res : 0;
     }
 
