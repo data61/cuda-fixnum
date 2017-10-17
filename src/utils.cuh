@@ -194,6 +194,8 @@ struct subwarp_data
         //   subwarpOffset = width * floor(threadIdx/width)
         //                 = threadIdx - (threadIdx % width)
         //                 = threadIdx - (threadIdx & (width - 1))
+        //                 // TODO: Do use this last formulation!
+        //                 = set bottom log2(width) bits of threadIdx to zero
         //
         // since width = 2^n.
         return T - (T & (width - 1));
