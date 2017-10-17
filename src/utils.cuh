@@ -25,7 +25,7 @@ umul(uint32_t &hi, uint32_t &lo, uint32_t a, uint32_t b)
 __device__ __forceinline__ void
 umul(uint64_t &r, uint32_t a, uint32_t b)
 {
-    asm (" mul.wide.u32 %0, %1, %2;"
+    asm ("mul.wide.u32 %0, %1, %2;"
          : "=l"(r)
          : "r"(a), "r"(b));
 }
@@ -281,6 +281,7 @@ shfl_down(uint64_t &var, unsigned int delta, int width)
     lo = __shfl_down(lo, delta, width);
     asm("mov.b64 %0, { %1, %2 };" : "=l"(var) : "r"(lo), "r"(hi));
 }
+
 
 
 #endif
