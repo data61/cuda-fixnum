@@ -1,7 +1,7 @@
-#ifndef CUDA_MPMA_HAND_CUH
-#define CUDA_MPMA_HAND_CUH
+#ifndef CUDA_MPMA_HAND_CU
+#define CUDA_MPMA_HAND_CU
 
-#include "utils.cuh"
+#include "utils.cu"
 
 /*
  * A "hand" encapsulates our notion of a fixed collection of digits in

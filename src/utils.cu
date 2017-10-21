@@ -1,5 +1,5 @@
-#ifndef CUDA_MPMA_UTILS_CUH
-#define CUDA_MPMA_UTILS_CUH
+#ifndef CUDA_MPMA_UTILS_CU
+#define CUDA_MPMA_UTILS_CU
 
 /*
  * PTX Assembler primitives
