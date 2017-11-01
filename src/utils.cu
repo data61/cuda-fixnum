@@ -257,6 +257,26 @@ struct subwarp_data
         return __shfl_down(var, delta, width);
     }
 
+    static __device__ __forceinline__
+    uint32_t
+    rotate_up(uint32_t var, unsigned int delta) {
+        // FIXME: Doesn't necessarily work for width != 32
+        int L = laneIdx();
+        // FIXME: Double check that this works if L - delta is negative.
+        int srcLane = (L - delta) & (width - 1);
+        return __shfl(var, srcLane, width);
+    }
+
+    static __device__ __forceinline__
+    uint32_t
+    rotate_down(uint32_t var, unsigned int delta) {
+        // FIXME: Doesn't necessarily work for width != 32
+        int L = laneIdx();
+        int srcLane = (L + delta) & (width - 1);
+        return __shfl(var, srcLane, width);
+    }
+
+
     /*
      * The next three functions extend the usual shuffle functions to 64bit
      * parameters.  See CUDA C Programming Guide, B.14:
