@@ -13,6 +13,10 @@
 __device__ __forceinline__ void
 umul(uint32_t &hi, uint32_t &lo, uint32_t a, uint32_t b)
 {
+    // TODO: Measure performance difference between this and the
+    // equivalent:
+    //   mul.hi.u32 %0, %2, %3
+    //   mul.lo.u32 %1, %2, %3
     asm ("{\n\t"
          " .reg .u64 tmp;\n\t"
          " mul.wide.u32 tmp, %2, %3;\n\t"
@@ -282,6 +286,8 @@ struct subwarp_data
      * parameters.  See CUDA C Programming Guide, B.14:
      *
      *   http://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#warp-shuffle-functions
+     *
+     * TODO: These are now available in CUDA 9.
      */
     static __device__ __forceinline__
     uint64_t
