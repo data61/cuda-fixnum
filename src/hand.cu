@@ -134,7 +134,7 @@ __device__ int
 hand_resolve_nails(digit &r)
 {
     // TODO: Make this work with a general width
-    constexpr int width = warpSize;
+    constexpr int WIDTH = warpSize;
     // TODO: This is ugly
     typedef nail_data<digit, NAIL_BITS> nd;
     typedef subwarp_data<WIDTH> subwarp;
