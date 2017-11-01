@@ -128,6 +128,12 @@ umad_hi_cc(uint64_t &lo, uint64_t &cy, uint64_t a, uint64_t b, uint64_t c)
  *
  * The term "warp" should be reserved for subwarps of width 32
  * (=warpSize).
+ *
+ * TODO: All of the warp vote and warp shuffle functions will be
+ * deprecated in CUDA 9.0 in favour of versions that take a mask
+ * selecting relevant lanes in the warp on which to act (see CUDA
+ * Programming Guide, B.15). Create an interface that encapsulates
+ * both.
  */
 
 template<int width = warpSize>
