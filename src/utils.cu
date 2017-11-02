@@ -261,13 +261,14 @@ struct subwarp_data
         return __shfl_down(var, delta, width);
     }
 
+    // NB: Assumes delta <= width + L. (There should be no reason for
+    // it ever to be more than width.)
     static __device__ __forceinline__
     uint32_t
     rotate_up(uint32_t var, unsigned int delta) {
         // FIXME: Doesn't necessarily work for width != 32
         int L = laneIdx();
-        // FIXME: Double check that this works if L - delta is negative.
-        int srcLane = (L - delta) & (width - 1);
+        int srcLane = (L + width - delta) & (width - 1);
         return __shfl(var, srcLane, width);
     }
 
