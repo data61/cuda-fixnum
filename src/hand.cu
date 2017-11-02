@@ -54,16 +54,17 @@ public:
     // multiply-by-zero-or-one
 };
 
-template< typename digit, digit DIGIT_MAX = ~(digit)0 >
+template< typename digit, typename subwarp = subwarp_data<> >
 __device__ int
 hand_resolve_cy(digit &r, int cy)
 {
-    int L = laneIdx();
+    constexpr digit DIGIT_MAX = ~(digit)0;
+    int L = subwarp::laneIdx();
     uint32_t allcarries, p, g;
     int cy_hi;
 
-    g = ballot(cy);                           // carry generate
-    p = ballot(r == DIGIT_MAX);               // carry propagate
+    g = subwarp::ballot(cy);                  // carry generate
+    p = subwarp::ballot(r == DIGIT_MAX);      // carry propagate
     allcarries = (p | g) + g;                 // propagate all carries
     cy_hi = allcarries < g;                   // detect final overflow
     allcarries = (allcarries ^ p) | (g << 1); // get effective carries
@@ -73,7 +74,7 @@ hand_resolve_cy(digit &r, int cy)
     return cy_hi;
 }
 
-template< typename digit >
+template< typename digit, typename subwarp = subwarp_data<> >
 __device__ int
 hand_add_cy(digit &r, digit a, digit b)
 {
@@ -82,7 +83,7 @@ hand_add_cy(digit &r, digit a, digit b)
     r = a + b;
     cy = r < a;
 
-    return hand_resolve_cy(r, cy);
+    return hand_resolve_cy<digit, subwarp>(r, cy);
 }
 
 
