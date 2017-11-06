@@ -44,6 +44,18 @@ struct myfunc {
     }
 };
 
+template< size_t N >
+struct mysum {
+    __device__
+    typename myarray<N>
+    operator()(const myarray<N> &u, const myarray<N> &v) {
+        typename myarray<N>::value_type sum = 0;
+        for (size_t i = 0; i < N; ++i)
+            sum += arr[i];
+        return sum;
+    }
+};
+
 
 template< int MOD, size_t N >
 struct myrand {
@@ -87,21 +99,23 @@ int main(int argc, char *argv[]) {
         n = atol(argv[1]);
 
 //    constexpr size_t NELTS = 7;
+    typedef myarray<NELTS> array;
+    typedef typename array::value_type value_type;
 
     // generate n random numbers serially
-    thrust::host_vector< myarray<NELTS> > h_vec(n);
+    thrust::host_vector< array > h_vec(n);
     ::generate(h_vec.begin(), h_vec.end(), myrand<32, NELTS>());
 
     cout << "h_vec = " << h_vec << endl;
 
     // transfer data to the device
-    thrust::device_vector< myarray<NELTS> > d_vec = h_vec;
-    thrust::device_vector< typename myarray<NELTS>::value_type > d_res(n);
+    thrust::device_vector< array > d_vec = h_vec;
+    thrust::device_vector< value_type > d_res(n);
 
     thrust::transform(d_vec.begin(), d_vec.end(), d_res.begin(), myfunc<NELTS>());
 
     // transfer data back to host
-    thrust::host_vector<int> res = d_res;
+    thrust::host_vector<value_type> res = d_res;
     //thrust::copy(d_vec.begin(), d_vec.end(), res.begin());
 
     cout << "res = " << res << endl;
