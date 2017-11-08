@@ -141,7 +141,7 @@ umad_hi_cc(uint64_t &lo, uint64_t &cy, uint64_t a, uint64_t b, uint64_t c)
  */
 
 template<int width = warpSize>
-struct subwarp_data
+struct subwarp
 {
 
     // width must divide warpSize (= 32) and be at least 2.
