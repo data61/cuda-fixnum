@@ -36,6 +36,7 @@ struct subwarp
     // bit, but it's a reasonable degenerate case.)
     static_assert(width > 1 && !(warpSize & (width - 1)));
 
+    constexpr int width = width;
     /*
      * Return the lane index within the subwarp.
      *
