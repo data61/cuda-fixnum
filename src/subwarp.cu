@@ -31,8 +31,9 @@
 template<int width = warpSize>
 struct subwarp
 {
-
     // width must divide warpSize (= 32) and be at least 2.
+    // TODO: Why can't we have width = 1? (Yes, it defeats the purpose a
+    // bit, but it's a reasonable degenerate case.)
     static_assert(width > 1 && !(warpSize & (width - 1)));
 
     /*
