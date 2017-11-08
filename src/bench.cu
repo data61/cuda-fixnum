@@ -1,70 +1,65 @@
 // -*- compile-command: "nvcc -D__STRICT_ANSI__ -ccbin clang-3.8 -Xcompiler -Wall,-Wextra -g -G -lineinfo -gencode arch=compute_50,code=sm_50 -o bench bench.cu -lstdc++" -*-
 
-#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
-#include <thrust/generate.h>
-#include <thrust/transform.h>
-#include <algorithm>
-#include <cstdlib>
+#include <iostream>
+
+#include "cuda_wrap.h"
 
 using namespace std;
 
 #define constexpr
 
-template< size_t N >
-struct myarray {
-    typedef uint32_t value_type;
+// parameterised by
+// hand implementation, which determines #bits per fixnum
+//   and which is itself parameterised by
+// subwarp data, which determines a SIMD decomposition of a fixnum
+//
+// TODO: Copy over functionality and documentation from IntmodVector.
+template< typename hand_impl >
+class fixnum_array {
+public:
+    // FIXME: This shouldn't be public; the create function that uses
+    // it should be templatised.
+    typedef typename hand_impl::digit value_tp;
 
-    value_type data[N];
-
-    myarray() { }
-
-    // Should be constexpr
-    __host__ __device__
-    const value_type &operator[](size_t i) const {
-        return data[i];
+    static fixnum_array *create(size_t len, value_tp init = 0) {
+        fixnum_array *a;
+        size_t nbytes = hand_impl::DIGIT_BYTES * hand_impl::DIGITS;
     }
 
-    __host__ __device__
-    value_type &operator[](size_t i) {
-        return data[i];
-    }
+    static fixnum_array *create(const uint8_t *data, size_t len, size_t bytes_per_elt);
+    ~fixnum_array();
+
+    template< typename U >
+    void retrieve(U *dest, size_t dest_len);
+
+private:
+    value_tp *ptr;
+    int nelts;
+
+    fixnum_array();
+    fixnum_array(const fixnum_array &);
+    fixnum_array &operator=(const fixnum_array &);
 };
 
+// FIXME: Passing this to map as an object probably makes inlining
+// impossible in most circumstances.
+template< typename T, typename subwarp_data >
+struct device_op {
+    int _x;
 
-template< size_t N >
-struct myfunc {
-    __device__
-    typename myarray<N>::value_type
-    operator()(const myarray<N> &arr) {
-        typename myarray<N>::value_type sum = 0;
-        for (size_t i = 0; i < N; ++i)
-            sum += arr[i];
-        return sum;
-    }
-};
+    device_op(int x) : _x(x) { }
 
-template< size_t N >
-struct mysum {
-    __device__
-    typename myarray<N>
-    operator()(const myarray<N> &u, const myarray<N> &v) {
-        typename myarray<N>::value_type sum = 0;
-        for (size_t i = 0; i < N; ++i)
-            sum += arr[i];
-        return sum;
-    }
-};
-
-
-template< int MOD, size_t N >
-struct myrand {
-    // Candidate for a "move" operator?
-    myarray<N> operator()() {
-        myarray<N> arr;
-        for (int i = 0; i < N; ++i)
-            arr[i] = (typename myarray<N>::value_type) (rand() % MOD);
-        return arr;
+    // A fixnum is represented by a register across a subwarp. This
+    // thread is responsible for the Lth registers of the arguments,
+    // where L is the lane index.
+    //
+    // This function should be available from the hand_impl; this sort
+    // of function should be implemented in terms of the hand_impl
+    // functions.
+    __device__ void
+    operator()(T &s, T &cy, T a, T b) {
+        s = a + b;
+        cy = s < a;
     }
 };
 
@@ -79,44 +74,29 @@ operator<<(ostream &os, const myarray<N> &arr) {
     return os;
 }
 
-
-template< typename T >
-ostream &
-operator<<(ostream &os, const thrust::host_vector<T> &v) {
-    os << "vector has size " << v.size() << endl;
-
-    for(int i = 0; i < v.size(); i++)
-        os << "v[" << i << "] = " << v[i] << endl;
-    return os;
-}
-
-
-#define NELTS 7
-
 int main(int argc, char *argv[]) {
     long n = 16;
     if (argc > 1)
         n = atol(argv[1]);
 
-//    constexpr size_t NELTS = 7;
-    typedef myarray<NELTS> array;
-    typedef typename array::value_type value_type;
-
-    // generate n random numbers serially
-    thrust::host_vector< array > h_vec(n);
-    ::generate(h_vec.begin(), h_vec.end(), myrand<32, NELTS>());
-
-    cout << "h_vec = " << h_vec << endl;
-
-    // transfer data to the device
-    thrust::device_vector< array > d_vec = h_vec;
-    thrust::device_vector< value_type > d_res(n);
-
-    thrust::transform(d_vec.begin(), d_vec.end(), d_res.begin(), myfunc<NELTS>());
-
-    // transfer data back to host
-    thrust::host_vector<value_type> res = d_res;
-    //thrust::copy(d_vec.begin(), d_vec.end(), res.begin());
+    // hand_impl determines how a operations map to a warp
+    //
+    // bits_per_fixnum should somehow capture the fact that a warp can
+    // be divided into subwarps
+    //
+    // n is the number of fixnums in the array; eventually only allow
+    // initialisation via a byte array or whatever
+    typedef fixnum_array< full_hand<uint32_t, 4> > fixnum_array;
+    auto arr1 = fixnum_array::create(n);
+    auto arr2 = fixnum_array::create(n);
+    // device_op should be able to start operating on the appropriate
+    // memory straight away
+    device_op fn(7);
+    // FIXME: How do I return cy without allocating a gigantic array
+    // where each element is only 0 or 1?  Could return the carries in
+    // the device_op fn?
+    decltype(arr1) res;
+    fixnum_array::map(fn, res, arr1, arr2);
 
     cout << "res = " << res << endl;
     return 0;
