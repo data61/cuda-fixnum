@@ -112,4 +112,69 @@ umad_hi_cc(uint64_t &lo, uint64_t &cy, uint64_t a, uint64_t b, uint64_t c)
          : "l"(a), "l" (b), "l"(c));
 }
 
+
+/*
+ * Count Leading Zeroes in x.
+ *
+ * Use __builtin_clz{,l,ll}(x) or CUDA ASM depending on context.
+ */
+__host__ __device__ __forceinline__
+int
+clz(uint32_t x) {
+#ifdef __CUDA_ARCH__
+    int n;
+    asm ("clz.b32 %0, %1;" : "=r"(n) : "r"(x));
+    return n;
+#else
+    static_assert(sizeof(unsigned int) == sizeof(uint32_t),
+            "attempted to use wrong __builtin_clz{,l,ll}()");
+    return __builtin_clz(x);
+#endif
+}
+
+__host__ __device__ __forceinline__
+int
+clz(uint64_t x) {
+#ifdef __CUDA_ARCH__
+    int n;
+    asm ("clz.b64 %0, %1;" : "=r"(n) : "l"(x));
+    return n;
+#else
+    static_assert(sizeof(unsigned long) == sizeof(uint64_t),
+            "attempted to use wrong __builtin_clz{,l,ll}()");
+    return __builtin_clzl(x);
+#endif
+}
+
+/*
+ * Return 1 if x = 2^n for some n, 0 otherwise.
+ */
+__host__ __device__ __forceinline__
+int
+is_binary_power(uint32_t x) {
+    return ! (x & (x - 1));
+}
+
+
+/*
+ * y >= x such that y = 2^n for some n. NB: This really is "inclusive"
+ * next, i.e. if x is a binary power we just return it.
+ */
+__host__ __device__ __forceinline__
+uint32_t
+next_binary_power(uint32_t x) {
+    enum { UINT32_BITS = 32 };
+    return is_binary_power(x) ? x : (1 << (UINT32_BITS - clz(x)));
+}
+
+
+/*
+ * ceiling(n / d) for integers.
+ */
+__host__ __device__ __forceinline__
+int
+iceil(int n, int d) {
+    return (n + d - 1) / d;
+}
+
 #endif
