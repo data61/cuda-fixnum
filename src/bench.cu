@@ -17,22 +17,41 @@ using namespace std;
 template< typename hand_impl >
 class fixnum_array {
 public:
+    template< typename T >
+    static fixnum_array *create(size_t nelts, T init = 0) {
+        fixnum_array *a;
+
+        cuda_malloc_managed(&a, sizeof(*a));
+        a->nelts = nelts;
+        if (nelts > 0) {
+            size_t nbytes = nelts * hand_impl::HAND_BYTES;
+            cuda_malloc(&a->ptr, nbytes);
+            // FIXME: Obviously should use zeros and init somehow
+            cuda_memset(a->ptr, 42, nbytes);
+        }
+    }
+
+    static fixnum_array *create(const uint8_t *data, size_t len, size_t bytes_per_elt);
+
+    ~fixnum_array() {
+        if (a->nelts > 0)
+            cuda_free(a->ptr);
+        cuda_free(a);
+    }
+
+    void retrieve(uint8_t **dest, size_t *dest_len, size_t *nelts) {
+        size_t nbytes;
+        *nelts = this->nelts;
+        nbytes = *nelts * hand_impl::HAND_BYTES;
+        *dest = new uint8_t[nbytes];
+        cuda_memcpy_from_device(*dest, a->ptr, nbytes);
+    }
+
+private:
     // FIXME: This shouldn't be public; the create function that uses
     // it should be templatised.
     typedef typename hand_impl::digit value_tp;
 
-    static fixnum_array *create(size_t len, value_tp init = 0) {
-        fixnum_array *a;
-        size_t nbytes = hand_impl::DIGIT_BYTES * hand_impl::DIGITS;
-    }
-
-    static fixnum_array *create(const uint8_t *data, size_t len, size_t bytes_per_elt);
-    ~fixnum_array();
-
-    template< typename U >
-    void retrieve(U *dest, size_t dest_len);
-
-private:
     value_tp *ptr;
     int nelts;
 
