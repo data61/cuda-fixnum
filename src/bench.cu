@@ -2,11 +2,30 @@
 
 #include <iostream>
 #include <cstring>
+#include <cassert>
 
 #include "cuda_wrap.h"
 #include "hand.cu"
 
 using namespace std;
+
+template< typename H >
+class fixnum_array;
+
+template< typename H >
+__global__ void
+binary_dispatch(fixnum_array<H> *dest, const fixnum_array<H> *src) {
+    int blk_tid_offset = blockDim.x * blockIdx.x;
+    int tid_in_blk = threadIdx.x;
+    int fn_idx = (blk_tid_offset + tid_in_blk) / H::SLOT_WIDTH;
+
+    if (fn_idx < src->nelts) {
+        int off = fn_idx * H::SLOT_WIDTH;
+
+        (void) H::add_cy(dest->ptr + off, dest->ptr + off, src->ptr + off);
+    }
+}
+
 
 // parameterised by
 // hand implementation, which determines #bits per fixnum
@@ -145,21 +164,6 @@ private:
         if (t) *t = clock() - *t;
     }
 };
-
-
-template< typename H >
-__global__ void
-binary_dispatch(fixnum_array<H> *dest, const fixnum_array<H> *src) {
-    int blk_tid_offset = blockDim.x * blockIdx.x;
-    int tid_in_blk = threadIdx.x;
-    int fn_idx = (blk_tid_offset + tid_in_blk) / H::SLOT_WIDTH;
-
-    if (fn_idx < src->nelts) {
-        int off = fn_idx * H::SLOT_WIDTH;
-
-        (void) H::add_cy(dest->ptr + off, dest->ptr + off, src->ptr + off);
-    }
-}
 
 
 // FIXME: Ignore this idea of feeding in new operations for now; just
