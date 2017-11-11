@@ -44,8 +44,9 @@ public:
         return nelts;
     }
 
-    size_t retrieve_into(uint8_t *dest, size_t dest_space, int idx) {
+    size_t retrieve_into(uint8_t *dest, size_t dest_space, int idx) const {
         size_t nbytes = hand_impl::FIXNUM_BYTES;
+	cout << "idx = " << idx << endl;
         if (dest_space < nbytes || idx < 0 || idx > nelts) {
             // FIXME: This is not the right way to handle an
             // "insufficient space" error or an "index out of bounds"
@@ -59,13 +60,13 @@ public:
         return nbytes;
     }
 
-    void retrieve(uint8_t **dest, size_t *dest_len, int idx) {
+    void retrieve(uint8_t **dest, size_t *dest_len, int idx) const {
         *dest_len = hand_impl::FIXNUM_BYTES;
         *dest = new uint8_t[*dest_len];
         retrieve_into(&dest, *dest_len, idx);
     }
 
-    void retrieve_all(uint8_t **dest, size_t *dest_len, size_t *nelts) {
+    void retrieve_all(uint8_t **dest, size_t *dest_len, size_t *nelts) const {
         size_t nbytes;
         *nelts = this->nelts;
         nbytes = *nelts * hand_impl::FIXNUM_BYTES;
@@ -193,7 +194,7 @@ operator<<(ostream &os, const fixnum_array<H> *arr) {
     os << "( " << num[0];
     for (int i = 1; i < nelts; ++i) {
         (void) arr->retrieve_into(num, nbytes, i);
-        os << ", " << num[i];
+        os << ", " << num[0];
     }
     os << " )" << flush;
     return os;
@@ -225,7 +226,8 @@ int main(int argc, char *argv[]) {
     // the device_op fn?
     //fixnum_array::map(fn, res, arr1, arr2);
 
-    //cout << "arr1 = " << arr1 << endl;
+    cout << "arr1 = " << arr1 << endl;
+    cout << "arr2 = " << arr2 << endl;
 
     arr1->destroy();
     arr2->destroy();
