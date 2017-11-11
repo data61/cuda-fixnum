@@ -107,7 +107,7 @@ public:
     }
 #endif
 
-private:
+//private:
     // FIXME: This shouldn't be public; the create function that uses
     // it should be templatised.
     typedef typename hand_impl::digit value_tp;
@@ -120,9 +120,9 @@ private:
     fixnum_array(const fixnum_array &);
     fixnum_array &operator=(const fixnum_array &);
 
-    template< typename H >
-    friend __global__ void
-    binary_dispatch(fixnum_array<H> *dest, const fixnum_array<H> *src);
+//    template< typename H >
+//    friend __global__ void
+//    binary_dispatch(fixnum_array<H> *dest, const fixnum_array<H> *src);
 
     void
     apply_to_all(const fixnum_array *src, clock_t *t = 0) {
