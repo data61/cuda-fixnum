@@ -52,14 +52,19 @@ public:
 template< typename digit_tp, int WIDTH = warpSize >
 class full_hand {
     typedef subwarp<WIDTH> subwarp;
+    static_assert(!(warpSize % WIDTH));
 
 public:
+    constexpr int SLOT_WIDTH = WIDTH;
+    constexpr int NSLOTS = warpsize / WIDTH;
+
     typedef digit_tp digit;
     constexpr int DIGIT_BYTES = sizeof(digit);
     constexpr int DIGIT_BITS = DIGIT_BYTES * 8;
     constexpr int DIGITS_PER_HAND = warpSize;
     constexpr int HAND_BYTES = DIGITS_PER_HAND * DIGIT_BYTES;
     constexpr int HAND_BITS = DIGITS_PER_HAND * DIGIT_BITS;
+    constexpr int FIXNUM_BYTES = SLOT_WIDTH * DIGIT_BYTES;
 
     //  +=  +  -  <<  >>  &=
     //  <  >
