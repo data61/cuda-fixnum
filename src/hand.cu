@@ -49,22 +49,21 @@ public:
 //
 // Normally a hand_implementation will not be templatised by digit
 // type, but in this case it works with uint32_t and uint64_t.
-template< typename digit_tp, int WIDTH = warpSize >
+template< typename digit_tp, int WIDTH = WARPSIZE >
 class full_hand {
     typedef subwarp<WIDTH> subwarp;
-    static_assert(!(warpSize % WIDTH));
 
 public:
-    constexpr int SLOT_WIDTH = WIDTH;
-    constexpr int NSLOTS = warpsize / WIDTH;
+    static constexpr int SLOT_WIDTH = WIDTH;
+    static constexpr int NSLOTS = WARPSIZE / WIDTH;
 
     typedef digit_tp digit;
-    constexpr int DIGIT_BYTES = sizeof(digit);
-    constexpr int DIGIT_BITS = DIGIT_BYTES * 8;
-    constexpr int DIGITS_PER_HAND = warpSize;
-    constexpr int HAND_BYTES = DIGITS_PER_HAND * DIGIT_BYTES;
-    constexpr int HAND_BITS = DIGITS_PER_HAND * DIGIT_BITS;
-    constexpr int FIXNUM_BYTES = SLOT_WIDTH * DIGIT_BYTES;
+    static constexpr int DIGIT_BYTES = sizeof(digit);
+    static constexpr int DIGIT_BITS = DIGIT_BYTES * 8;
+    static constexpr int DIGITS_PER_HAND = WARPSIZE;
+    static constexpr int HAND_BYTES = DIGITS_PER_HAND * DIGIT_BYTES;
+    static constexpr int HAND_BITS = DIGITS_PER_HAND * DIGIT_BITS;
+    static constexpr int FIXNUM_BYTES = SLOT_WIDTH * DIGIT_BYTES;
 
     //  +=  +  -  <<  >>  &=
     //  <  >
@@ -111,7 +110,7 @@ public:
     }
 
 private:
-    constexpr digit DIGIT_MAX = ~(digit)0;
+    static constexpr digit DIGIT_MAX = ~(digit)0;
 
     static __device__
     int

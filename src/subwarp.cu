@@ -5,7 +5,7 @@
 // considered a constant value, so cannot be used in constexprs or
 // template parameters or static_asserts. Hence we must use WARPSIZE
 // instead.
-constexpr int WARPSIZE = 32;
+static constexpr int WARPSIZE = 32;
 
 /*
  * SUBWARPS:
@@ -37,12 +37,9 @@ constexpr int WARPSIZE = 32;
 template<int width = WARPSIZE>
 struct subwarp
 {
-    // width must divide warpSize (= 32) and be at least 2.
-    // TODO: Why can't we have width = 1? (Yes, it defeats the purpose a
-    // bit, but it's a reasonable degenerate case.)
-    static_assert(width > 1 && !(warpSize & (width - 1)));
+    static_assert(width > 0 && !(WARPSIZE & (width - 1)),
+        "subwarp width must be a positive divisor of warpSize (=32)");
 
-    constexpr int width = width;
     /*
      * Return the lane index within the subwarp.
      *
@@ -65,14 +62,14 @@ struct subwarp
      *
      * The top lane of a subwarp is the one with index width - 1.
      */
-    constexpr int toplaneIdx = width - 1;
+    static constexpr int toplaneIdx = width - 1;
 
     /*
      * Mask which selects the first width bits of a number.
      *
      * Useful in conjunction with offset() and __ballot().
      */
-    constexpr uint32_t mask = (1UL << width) - 1UL;
+    static constexpr uint32_t mask = (1UL << width) - 1UL;
 
     /*
      * Return the thread index within the warp where the subwarp

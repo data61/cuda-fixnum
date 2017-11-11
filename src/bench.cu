@@ -1,4 +1,4 @@
-// -*- compile-command: "nvcc -D__STRICT_ANSI__ -ccbin clang-3.8 -Xcompiler -Wall,-Wextra -g -G -lineinfo -gencode arch=compute_50,code=sm_50 -o bench bench.cu -lstdc++" -*-
+// -*- compile-command: "nvcc -D__STRICT_ANSI__ -ccbin clang-3.8 -std=c++11 -Xcompiler -Wall,-Wextra -g -G -lineinfo -gencode arch=compute_50,code=sm_50 -o bench bench.cu -lstdc++" -*-
 
 #include <iostream>
 #include <cstring>
@@ -29,37 +29,40 @@ public:
             // FIXME: Obviously should use zeros and init somehow
             cuda_memset(a->ptr, c, nbytes);
         }
+        return a;
     }
 
     static fixnum_array *create(const uint8_t *data, size_t len, size_t bytes_per_elt);
 
-    // TODO: Any advantage to making this a normal method "destroy()"?
-    ~fixnum_array() {
-        if (a->nelts > 0)
-            cuda_free(a->ptr);
-        cuda_free(a);
+    void destroy() {
+        if (nelts > 0)
+            cuda_free(ptr);
+        cuda_free(this);
     }
 
-    void retrieve_into(uint8_t *dest, size_t dest_space, size_t *res_len, int idx) {
+    int length() const {
+        return nelts;
+    }
+
+    size_t retrieve_into(uint8_t *dest, size_t dest_space, int idx) {
         size_t nbytes = hand_impl::FIXNUM_BYTES;
         if (dest_space < nbytes || idx < 0 || idx > nelts) {
             // FIXME: This is not the right way to handle an
             // "insufficient space" error or an "index out of bounds"
             // error.
-            *res_len = 0;
-            return;
+            return 0;
         }
         // clear all of dest
         // TODO: Is this necessary? Should it be optional?
         memset(dest, 0, dest_space);
-        cuda_memcpy_from_device(dest, a->ptr + idx * nbytes, nbytes);
-        *res_len = nbytes;
+        cuda_memcpy_from_device(dest, ptr + idx * nbytes, nbytes);
+        return nbytes;
     }
 
     void retrieve(uint8_t **dest, size_t *dest_len, int idx) {
         *dest_len = hand_impl::FIXNUM_BYTES;
         *dest = new uint8_t[*dest_len];
-        retrieve_into(&dest, *dest_len, dest_len, idx);
+        retrieve_into(&dest, *dest_len, idx);
     }
 
     void retrieve_all(uint8_t **dest, size_t *dest_len, size_t *nelts) {
@@ -69,8 +72,9 @@ public:
         *dest = new uint8_t[nbytes];
         // FIXME: This won't correctly zero-pad each element
         memset(dest, 0, nbytes);
-        cuda_memcpy_from_device(*dest, a->ptr, nbytes);
+        cuda_memcpy_from_device(*dest, ptr, nbytes);
     }
+
 #if 0
     int add_cy(const fixnum_array *other) {
         // FIXME: Return correct carry
@@ -93,6 +97,7 @@ private:
     int nelts;
 
     fixnum_array();
+    ~fixnum_array();
     fixnum_array(const fixnum_array &);
     fixnum_array &operator=(const fixnum_array &);
 
@@ -177,12 +182,19 @@ struct device_op {
 };
 
 
-template< typename U >
+template< typename H >
 ostream &
-operator<<(ostream &os, const fixnum_array<U> &arr) {
-    os << "( " << arr[0];
-    for (int i = 1; i < N; ++i)
-        os << ", " << arr[i];
+operator<<(ostream &os, const fixnum_array<H> *arr) {
+    constexpr int nbytes = H::FIXNUM_BYTES;
+    uint8_t num[nbytes];
+    int nelts = arr->length();
+
+    (void) arr->retrieve_into(num, nbytes, 0);
+    os << "( " << num[0];
+    for (int i = 1; i < nelts; ++i) {
+        (void) arr->retrieve_into(num, nbytes, i);
+        os << ", " << num[i];
+    }
     os << " )" << flush;
     return os;
 }
@@ -201,22 +213,22 @@ int main(int argc, char *argv[]) {
     // n is the number of fixnums in the array; eventually only allow
     // initialisation via a byte array or whatever
     typedef fixnum_array< full_hand<uint32_t, 4> > fixnum_array;
-    auto arr1 = fixnum_array::create(n);
-    auto arr2 = fixnum_array::create(n);
+    auto arr1 = fixnum_array::create(n, 0);
+    auto arr2 = fixnum_array::create(n, 7);
 
     // device_op should be able to start operating on the appropriate
     // memory straight away
-    device_op fn(7);
+    //device_op fn(7);
 
     // FIXME: How do I return cy without allocating a gigantic array
     // where each element is only 0 or 1?  Could return the carries in
     // the device_op fn?
     //fixnum_array::map(fn, res, arr1, arr2);
 
-    cout << "arr1 = " << arr1 << endl;
+    //cout << "arr1 = " << arr1 << endl;
 
-    delete arr1;
-    delete arr2;
+    arr1->destroy();
+    arr2->destroy();
 
     return 0;
 }
