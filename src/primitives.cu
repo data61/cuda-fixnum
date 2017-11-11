@@ -1,6 +1,8 @@
 #ifndef CUDA_MPMA_PRIMITIVES_CU
 #define CUDA_MPMA_PRIMITIVES_CU
 
+#include <stdint.h>
+
 /*
  * Low-level/primitive functions.
  */
@@ -81,7 +83,7 @@ umad_lo(uint64_t &lo, uint64_t a, uint64_t b, uint64_t c) {
 __device__ __forceinline__ void
 umad_hi(uint64_t &hi, uint64_t a, uint64_t b, uint64_t c) {
     asm ("mad.hi.u64 %0, %1, %2, %3;"
-         : "=l"(lo)
+         : "=l"(hi)
          : "l"(a), "l" (b), "l"(c));
 }
 
