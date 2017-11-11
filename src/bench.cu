@@ -75,14 +75,14 @@ public:
         cuda_memcpy_from_device(*dest, ptr, nbytes);
     }
 
-#if 0
     int add_cy(const fixnum_array *other) {
         // FIXME: Return correct carry
         int cy = 0;
-        apply_to_all(hand_impl::add_cy, this, other);
+        apply_to_all(/* hand_impl::add_cy,*/ other);
         return cy;
     }
 
+#if 0
     void mullo(const fixnum_array *other) {
         apply_to_all(hand_impl::mullo, this, other);
     }
@@ -101,34 +101,26 @@ private:
     fixnum_array(const fixnum_array &);
     fixnum_array &operator=(const fixnum_array &);
 
-#if 0
-    template< typename Func >
-    __global__ void
-    binary_dispatch(const Func *fn, fixnum_array *dest,
-            const fixnum_array *src1, const fixnum_array *src2) {
-        int blk_tid_offset = blockDim.x * blockIdx.x;
-        int tid_in_blk = threadIdx.x;
-        int fn_idx = (blk_tid_offset + tid_in_blk) / fn_width;
+    template< typename H >
+    friend __global__ void
+    binary_dispatch(fixnum_array<H> *dest, const fixnum_array<H> *src);
 
-        if (fn_idx < Z->nelts) {
-            int zoff = fn_idx * Z->width;
-            int xoff = fn_idx * X->width;
-            fn->apply(Z->ptr + zoff, Z->width, X->ptr + xoff, X->width);
-        }
-    }
-
-    // TODO: Set this to the number of threads on a single SM on the host GPU.
-    template< typename Func, int BLOCK_SIZE = 192 >
     void
-    apply_to_all(const Func *fn, fixnum_array *dest, const fixnum_array *src, clock_t *t) {
+    apply_to_all(const fixnum_array *src, clock_t *t = 0) {
+        // TODO: Set this to the number of threads on a single SM on the host GPU.
+        constexpr int BLOCK_SIZE = 192;
+
+        fixnum_array *dest = this;
+
         // dest and src must be the same length
         assert(dest->nelts == src->nelts);
         // BLOCK_SIZE must be a multiple of warpSize
-        static_assert(!(BLOCK_SIZE % warpSize));
+        static_assert(!(BLOCK_SIZE % WARPSIZE),
+                "block size must be a multiple of warpSize");
 
         // FIXME: Check this calculation
         //int fixnums_per_block = (BLOCK_SIZE / warpSize) * hand_impl::NSLOTS;
-        int fixnums_per_block = BLOCK_SIZE / hand_impl::SLOT_WIDTH;
+        constexpr int fixnums_per_block = BLOCK_SIZE / hand_impl::SLOT_WIDTH;
 
         // FIXME: nblocks could be too big for a single kernel call to handle
         int nblocks = iceil(src->nelts, fixnums_per_block);
@@ -137,14 +129,14 @@ private:
         // nblocks > 0 iff src->nelts > 0
         if (nblocks > 0) {
             cudaStream_t stream;
-            cuda_check(cudaStreamCreate(&stream), "create stream (binary dispatch)");
+            cuda_check(cudaStreamCreate(&stream), "create stream");
             // FIXME: how do I attach the function?
             //stream_attach(stream, fn);
             cuda_stream_attach_mem(stream, src);
             cuda_stream_attach_mem(stream, dest);
             cuda_check(cudaStreamSynchronize(stream), "stream sync");
 
-            binary_dispatch<<< nblocks, BLOCK_SIZE, 0, stream >>>(fn, dest, src);
+            binary_dispatch<<< nblocks, BLOCK_SIZE, 0, stream >>>(dest, src);
 
             cuda_check(cudaPeekAtLastError(), "kernel invocation/run");
             cuda_check(cudaStreamSynchronize(stream), "stream sync");
@@ -152,13 +144,27 @@ private:
         }
         if (t) *t = clock() - *t;
     }
-#endif
 };
+
+
+template< typename H >
+__global__ void
+binary_dispatch(fixnum_array<H> *dest, const fixnum_array<H> *src) {
+    int blk_tid_offset = blockDim.x * blockIdx.x;
+    int tid_in_blk = threadIdx.x;
+    int fn_idx = (blk_tid_offset + tid_in_blk) / H::SLOT_WIDTH;
+
+    if (fn_idx < src->nelts) {
+        int off = fn_idx * H::SLOT_WIDTH;
+
+        (void) H::add_cy(dest->ptr + off, dest->ptr + off, src->ptr + off);
+    }
+}
 
 
 // FIXME: Ignore this idea of feeding in new operations for now; just
 // use a fixed set of operations determined by hand_impl
-// 
+//
 // FIXME: Passing this to map as an object probably makes inlining
 // impossible in most circumstances.
 template< typename T, typename subwarp_data >
@@ -216,7 +222,7 @@ int main(int argc, char *argv[]) {
     // n is the number of fixnums in the array; eventually only allow
     // initialisation via a byte array or whatever
     typedef fixnum_array< full_hand<uint32_t, 4> > fixnum_array;
-    auto arr1 = fixnum_array::create(n, 0);
+    auto arr1 = fixnum_array::create(n, 5);
     auto arr2 = fixnum_array::create(n, 7);
 
     // device_op should be able to start operating on the appropriate
@@ -227,6 +233,11 @@ int main(int argc, char *argv[]) {
     // where each element is only 0 or 1?  Could return the carries in
     // the device_op fn?
     //fixnum_array::map(fn, res, arr1, arr2);
+
+    cout << "arr1 = " << arr1 << endl;
+    cout << "arr2 = " << arr2 << endl;
+
+    arr1->add_cy(arr2);
 
     cout << "arr1 = " << arr1 << endl;
     cout << "arr2 = " << arr2 << endl;

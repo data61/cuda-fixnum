@@ -24,27 +24,6 @@
  * hands.
  */
 
-#if 0
-class number {
-public:
-    //  +=  +  -  <<  >>  &=
-    //  <  >
-
-    number add(const number x, const number y);
-    number sub(const number x);
-    number neg();
-    number mulwide(const number x);
-    number mullo(const number x);
-    number mulhi(const number x);
-
-    int lt(number x, number y);
-    int gt(number x, number y);
-
-    // multiply-by-zero-or-one
-    number keep_or_kill(int x);
-};
-#endif
-
 // A hand implementation
 //
 // Normally a hand_implementation will not be templatised by digit
@@ -72,13 +51,14 @@ public:
 
     static __device__
     int
-    add_cy(digit &r, digit a, digit b) {
+    add_cy(digit r[], const digit a[], const digit b[]) {
         int cy;
+        int L = subwarp::laneIdx();
 
-        r = a + b;
-        cy = r < a;
+        r[L] = a[L] + b[L];
+        cy = r[L] < a[L];
 
-        return resolve_carries(r, cy);
+        return resolve_carries(r[L], cy);
     }
 
     /*
