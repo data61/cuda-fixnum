@@ -46,7 +46,6 @@ public:
 
     size_t retrieve_into(uint8_t *dest, size_t dest_space, int idx) const {
         size_t nbytes = hand_impl::FIXNUM_BYTES;
-	cout << "idx = " << idx << endl;
         if (dest_space < nbytes || idx < 0 || idx > nelts) {
             // FIXME: This is not the right way to handle an
             // "insufficient space" error or an "index out of bounds"
@@ -56,7 +55,7 @@ public:
         // clear all of dest
         // TODO: Is this necessary? Should it be optional?
         memset(dest, 0, dest_space);
-        cuda_memcpy_from_device(dest, ptr + idx * nbytes, nbytes);
+        cuda_memcpy_from_device(dest, ptr + idx * hand_impl::SLOT_WIDTH, nbytes);
         return nbytes;
     }
 
@@ -190,11 +189,14 @@ operator<<(ostream &os, const fixnum_array<H> *arr) {
     uint8_t num[nbytes];
     int nelts = arr->length();
 
-    (void) arr->retrieve_into(num, nbytes, 0);
-    os << "( " << num[0];
-    for (int i = 1; i < nelts; ++i) {
-        (void) arr->retrieve_into(num, nbytes, i);
-        os << ", " << num[0];
+    os << "( ";
+    if (nelts > 0) {
+        (void) arr->retrieve_into(num, nbytes, 0);
+        os << (int)num[0];
+        for (int i = 1; i < nelts; ++i) {
+            (void) arr->retrieve_into(num, nbytes, i);
+            os << ", " << (int)num[0];
+        }
     }
     os << " )" << flush;
     return os;
