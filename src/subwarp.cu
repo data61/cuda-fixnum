@@ -1,6 +1,12 @@
 #ifndef CUDA_MPMA_SUBWARP_CU
 #define CUDA_MPMA_SUBWARP_CU
 
+// For some reason the warpSize value provided by CUDA is not
+// considered a constant value, so cannot be used in constexprs or
+// template parameters or static_asserts. Hence we must use WARPSIZE
+// instead.
+constexpr int WARPSIZE = 32;
+
 /*
  * SUBWARPS:
  *
@@ -28,7 +34,7 @@
  * both.
  */
 
-template<int width = warpSize>
+template<int width = WARPSIZE>
 struct subwarp
 {
     // width must divide warpSize (= 32) and be at least 2.
