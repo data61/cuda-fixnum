@@ -49,17 +49,21 @@ public:
 
     // multiply-by-zero-or-one
 
-    static __device__
-    int
-    add_cy(digit r[], const digit a[], const digit b[]) {
-        int cy;
+    __device__ void
+    fn_dispatch(digit *r, const digit *a, const digit *b) {
         int L = subwarp::laneIdx();
-
-        r[L] = a[L] + b[L];
-        cy = r[L] < a[L];
-
-        return resolve_carries(r[L], cy);
+        (void) add_cy(r[L], a[L], b[L]);
     }
+
+    struct add_cy {
+        __device__ int operator()(digit &r, digit a, const digit b) {
+            int cy;
+
+            r = a + b;
+            cy = r < a;
+            return resolve_carries(r, cy);
+        }
+    };
 
     /*
      * r = lo_half(a * b) with subwarp size width.
@@ -67,27 +71,27 @@ public:
      * The "lo_half" is the product modulo 2^(???), i.e. the same size as
      * the inputs.
      */
-    static __device__
-    void
-    mullo(digit &r, digit a, digit b) {
-        // TODO: This should be smaller, probably uint16_t (smallest
-        // possible for addition).  Strangely, the naive translation to
-        // the smaller size broke; to investigate.
-        digit cy = 0;
+    struct mullo {
+        __device__ void operator()(digit &r, digit a, digit b) {
+            // TODO: This should be smaller, probably uint16_t (smallest
+            // possible for addition).  Strangely, the naive translation to
+            // the smaller size broke; to investigate.
+            digit cy = 0;
 
-        r = 0;
-        for (int i = WIDTH - 1; i >= 0; --i) {
-            digit aa = subwarp::shfl(a, i);
+            r = 0;
+            for (int i = WIDTH - 1; i >= 0; --i) {
+                digit aa = subwarp::shfl(a, i);
 
-            // TODO: See if using umad.wide improves this.
-            umad_hi_cc(r, cy, aa, b, r);
-            r = subwarp::shfl_up0(r, 1);
+                // TODO: See if using umad.wide improves this.
+                umad_hi_cc(r, cy, aa, b, r);
+                r = subwarp::shfl_up0(r, 1);
+                cy = subwarp::shfl_up0(cy, 1);
+                umad_lo_cc(r, cy, aa, b, r);
+            }
             cy = subwarp::shfl_up0(cy, 1);
-            umad_lo_cc(r, cy, aa, b, r);
+            (void) add_cy(r, r, cy);
         }
-        cy = subwarp::shfl_up0(cy, 1);
-        (void) add_cy(r, r, cy);
-    }
+    };
 
 private:
     static constexpr digit DIGIT_MAX = ~(digit)0;

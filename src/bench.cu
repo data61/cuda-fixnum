@@ -12,9 +12,9 @@ using namespace std;
 template< typename H >
 class fixnum_array;
 
-template< typename H >
+template< typename Func, typename... Args >
 __global__ void
-binary_dispatch(fixnum_array<H> *dest, const fixnum_array<H> *src) {
+dispatch(Func fn, Args... args) {
     int blk_tid_offset = blockDim.x * blockIdx.x;
     int tid_in_blk = threadIdx.x;
     int fn_idx = (blk_tid_offset + tid_in_blk) / H::SLOT_WIDTH;
@@ -22,7 +22,8 @@ binary_dispatch(fixnum_array<H> *dest, const fixnum_array<H> *src) {
     if (fn_idx < src->nelts) {
         int off = fn_idx * H::SLOT_WIDTH;
 
-        (void) H::add_cy(dest->ptr + off, dest->ptr + off, src->ptr + off);
+        //dest->ptr + off, dest->ptr + off, src->ptr + off);
+        H::fn_dispatch(fn, off, args);
     }
 }
 
