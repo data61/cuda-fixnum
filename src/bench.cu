@@ -14,16 +14,16 @@ class fixnum_array;
 
 template< typename Func, typename... Args >
 __global__ void
-dispatch(Func fn, Args... args) {
+dispatch(Func fn, int nelts, Args... args) {
     int blk_tid_offset = blockDim.x * blockIdx.x;
     int tid_in_blk = threadIdx.x;
     int fn_idx = (blk_tid_offset + tid_in_blk) / H::SLOT_WIDTH;
 
-    if (fn_idx < src->nelts) {
+    if (fn_idx < nelts) {
         int off = fn_idx * H::SLOT_WIDTH;
 
         //dest->ptr + off, dest->ptr + off, src->ptr + off);
-        H::fn_dispatch(fn, off, args);
+        fn(off, args);
     }
 }
 
@@ -108,7 +108,7 @@ public:
     }
 #endif
 
-//private:
+private:
     // FIXME: This shouldn't be public; the create function that uses
     // it should be templatised.
     typedef typename hand_impl::digit value_tp;
@@ -120,10 +120,6 @@ public:
     ~fixnum_array();
     fixnum_array(const fixnum_array &);
     fixnum_array &operator=(const fixnum_array &);
-
-//    template< typename H >
-//    friend __global__ void
-//    binary_dispatch(fixnum_array<H> *dest, const fixnum_array<H> *src);
 
     void
     apply_to_all(const fixnum_array *src, clock_t *t = 0) {
@@ -156,7 +152,7 @@ public:
             cuda_stream_attach_mem(stream, dest);
             cuda_check(cudaStreamSynchronize(stream), "stream sync");
 
-            binary_dispatch<<< nblocks, BLOCK_SIZE, 0, stream >>>(dest, src);
+            dispatch<<< nblocks, BLOCK_SIZE, 0, stream >>>(dest, src);
 
             cuda_check(cudaPeekAtLastError(), "kernel invocation/run");
             cuda_check(cudaStreamSynchronize(stream), "stream sync");

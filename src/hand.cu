@@ -49,19 +49,38 @@ public:
 
     // multiply-by-zero-or-one
 
-    __device__ void
-    fn_dispatch(digit *r, const digit *a, const digit *b) {
-        int L = subwarp::laneIdx();
-        (void) add_cy(r[L], a[L], b[L]);
-    }
-
     struct add_cy {
-        __device__ int operator()(digit &r, digit a, const digit b) {
+    private:
+        __device__ int resolve_carries(digit &r, int cy) {
+            constexpr digit DIGIT_MAX = ~(digit)0;
+            int L = subwarp::laneIdx();
+            uint32_t allcarries, p, g;
+            int cy_hi;
+
+            g = subwarp::ballot(cy);                  // carry generate
+            p = subwarp::ballot(r == DIGIT_MAX);      // carry propagate
+            allcarries = (p | g) + g;                 // propagate all carries
+            cy_hi = allcarries < g;                   // detect final overflow
+            allcarries = (allcarries ^ p) | (g << 1); // get effective carries
+            r += (allcarries >> L) & 1;
+
+            // return highest carry
+            return cy_hi;
+        }
+
+    public:
+        __device__ int call(digit &r, digit a, const digit b) {
             int cy;
 
             r = a + b;
             cy = r < a;
             return resolve_carries(r, cy);
+        }
+
+        // TODO: Work out how to refactor this and the sister method in mullo.
+        __device__ void operator()(int fn_off, digit *r, const digit *a, const digit *b) {
+            int off = fn_off + subwarp::laneIdx();
+            (void) call(r[off], a[off], b[off]);
         }
     };
 
@@ -72,7 +91,7 @@ public:
      * the inputs.
      */
     struct mullo {
-        __device__ void operator()(digit &r, digit a, digit b) {
+        __device__ void call(digit &r, digit a, digit b) {
             // TODO: This should be smaller, probably uint16_t (smallest
             // possible for addition).  Strangely, the naive translation to
             // the smaller size broke; to investigate.
@@ -91,28 +110,13 @@ public:
             cy = subwarp::shfl_up0(cy, 1);
             (void) add_cy(r, r, cy);
         }
+
+        // TODO: Work out how to refactor this and the sister method in add_cy.
+        __device__ void operator()(int fn_off, digit *r, const digit *a, const digit *b) {
+            int off = fn_off + subwarp::laneIdx();
+            (void) call(r[off], a[off], b[off]);
+        }
     };
-
-private:
-    static constexpr digit DIGIT_MAX = ~(digit)0;
-
-    static __device__
-    int
-    resolve_carries(digit &r, int cy) {
-        int L = subwarp::laneIdx();
-        uint32_t allcarries, p, g;
-        int cy_hi;
-
-        g = subwarp::ballot(cy);                  // carry generate
-        p = subwarp::ballot(r == DIGIT_MAX);      // carry propagate
-        allcarries = (p | g) + g;                 // propagate all carries
-        cy_hi = allcarries < g;                   // detect final overflow
-        allcarries = (allcarries ^ p) | (g << 1); // get effective carries
-        r += (allcarries >> L) & 1;
-
-        // return highest carry
-        return cy_hi;
-    }
 };
 
 #endif
