@@ -12,15 +12,17 @@ using namespace std;
 template< typename H >
 class fixnum_array;
 
-template< typename Func, typename... Args >
+// TODO: Passing both Hand and Func is ugly; Hand should be implicit
+// in Func.
+template< typename Hand, typename Func, typename... Args >
 __global__ void
 dispatch(Func fn, int nelts, Args... args) {
     int blk_tid_offset = blockDim.x * blockIdx.x;
     int tid_in_blk = threadIdx.x;
-    int fn_idx = (blk_tid_offset + tid_in_blk) / H::SLOT_WIDTH;
+    int fn_idx = (blk_tid_offset + tid_in_blk) / Hand::SLOT_WIDTH;
 
     if (fn_idx < nelts) {
-        int off = fn_idx * H::SLOT_WIDTH;
+        int off = fn_idx * Hand::SLOT_WIDTH;
 
         //dest->ptr + off, dest->ptr + off, src->ptr + off);
         fn(off, args);
@@ -98,7 +100,7 @@ public:
     int add_cy(const fixnum_array *other) {
         // FIXME: Return correct carry
         int cy = 0;
-        apply_to_all(/* hand_impl::add_cy,*/ other);
+        apply_to_all(hand_impl::add_cy(), other);
         return cy;
     }
 
@@ -121,8 +123,10 @@ private:
     fixnum_array(const fixnum_array &);
     fixnum_array &operator=(const fixnum_array &);
 
-    void
-    apply_to_all(const fixnum_array *src, clock_t *t = 0) {
+    // TODO: This whole function shouldn't be a template; most of the
+    // code is independent of Func.
+    template< typename Func >
+    void apply_to_all(Func fn, const fixnum_array *src, clock_t *t = 0) {
         // TODO: Set this to the number of threads on a single SM on the host GPU.
         constexpr int BLOCK_SIZE = 192;
 
@@ -152,7 +156,7 @@ private:
             cuda_stream_attach_mem(stream, dest);
             cuda_check(cudaStreamSynchronize(stream), "stream sync");
 
-            dispatch<<< nblocks, BLOCK_SIZE, 0, stream >>>(dest, src);
+            dispatch<hand_impl><<< nblocks, BLOCK_SIZE, 0, stream >>>(fn, nelts, dest, dest, src);
 
             cuda_check(cudaPeekAtLastError(), "kernel invocation/run");
             cuda_check(cudaStreamSynchronize(stream), "stream sync");
