@@ -25,7 +25,7 @@ dispatch(Func fn, int nelts, Args... args) {
         int off = fn_idx * Hand::SLOT_WIDTH;
 
         //dest->ptr + off, dest->ptr + off, src->ptr + off);
-        fn(off, args);
+        fn(off, args...);
     }
 }
 
@@ -100,7 +100,8 @@ public:
     int add_cy(const fixnum_array *other) {
         // FIXME: Return correct carry
         int cy = 0;
-        apply_to_all(hand_impl::add_cy(), other);
+        typename hand_impl::add_cy fn;
+        apply_to_all(fn, other);
         return cy;
     }
 
@@ -130,10 +131,8 @@ private:
         // TODO: Set this to the number of threads on a single SM on the host GPU.
         constexpr int BLOCK_SIZE = 192;
 
-        fixnum_array *dest = this;
-
         // dest and src must be the same length
-        assert(dest->nelts == src->nelts);
+        assert(nelts == src->nelts);
         // BLOCK_SIZE must be a multiple of warpSize
         static_assert(!(BLOCK_SIZE % WARPSIZE),
                 "block size must be a multiple of warpSize");
@@ -152,11 +151,11 @@ private:
             cuda_check(cudaStreamCreate(&stream), "create stream");
             // FIXME: how do I attach the function?
             //stream_attach(stream, fn);
-            cuda_stream_attach_mem(stream, src);
-            cuda_stream_attach_mem(stream, dest);
+//            cuda_stream_attach_mem(stream, src->ptr);
+//            cuda_stream_attach_mem(stream, ptr);
             cuda_check(cudaStreamSynchronize(stream), "stream sync");
 
-            dispatch<hand_impl><<< nblocks, BLOCK_SIZE, 0, stream >>>(fn, nelts, dest, dest, src);
+            dispatch<hand_impl><<< nblocks, BLOCK_SIZE, 0, stream >>>(fn, nelts, ptr, ptr, src->ptr);
 
             cuda_check(cudaPeekAtLastError(), "kernel invocation/run");
             cuda_check(cudaStreamSynchronize(stream), "stream sync");
