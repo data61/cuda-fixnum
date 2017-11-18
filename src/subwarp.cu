@@ -189,8 +189,8 @@ struct subwarp
         uint32_t hi, lo;
 
         asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
-        hi = shfl(hi, srcLane, width);
-        lo = shfl(lo, srcLane, width);
+        hi = shfl(hi, srcLane);
+        lo = shfl(lo, srcLane);
         asm("mov.b64 %0, { %1, %2 };" : "=l"(res) : "r"(lo), "r"(hi));
         return res;
     }
@@ -202,8 +202,8 @@ struct subwarp
         uint32_t hi, lo;
 
         asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
-        hi = shfl_up(hi, delta, width);
-        lo = shfl_up(lo, delta, width);
+        hi = shfl_up(hi, delta);
+        lo = shfl_up(lo, delta);
         asm("mov.b64 %0, { %1, %2 };" : "=l"(res) : "r"(lo), "r"(hi));
         return res;
     }
@@ -215,8 +215,8 @@ struct subwarp
         uint32_t hi, lo;
 
         asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
-        hi = shfl_down(hi, delta, width);
-        lo = shfl_down(lo, delta, width);
+        hi = shfl_down(hi, delta);
+        lo = shfl_down(lo, delta);
         asm("mov.b64 %0, { %1, %2 };" : "=l"(res) : "r"(lo), "r"(hi));
         return res;
     }
