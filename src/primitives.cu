@@ -1,5 +1,4 @@
-#ifndef CUDA_MPMA_PRIMITIVES_CU
-#define CUDA_MPMA_PRIMITIVES_CU
+#pragma once
 
 #include <stdint.h>
 
@@ -199,5 +198,3 @@ int
 iceil(int n, int d) {
     return (n + d - 1) / d;
 }
-
-#endif

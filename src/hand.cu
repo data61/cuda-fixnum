@@ -1,5 +1,4 @@
-#ifndef CUDA_MPMA_HAND_CU
-#define CUDA_MPMA_HAND_CU
+#pragma once
 
 #include "primitives.cu"
 #include "subwarp.cu"
@@ -119,5 +118,3 @@ public:
         }
     };
 };
-
-#endif

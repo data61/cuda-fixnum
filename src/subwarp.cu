@@ -1,5 +1,4 @@
-#ifndef CUDA_MPMA_SUBWARP_CU
-#define CUDA_MPMA_SUBWARP_CU
+#pragma once
 
 // For some reason the warpSize value provided by CUDA is not
 // considered a constant value, so cannot be used in constexprs or
@@ -248,6 +247,3 @@ struct subwarp
 private:
     subwarp();
 };
-
-
-#endif

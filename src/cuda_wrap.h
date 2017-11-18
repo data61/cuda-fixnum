@@ -1,5 +1,4 @@
-#ifndef CUDA_MPMA_CUDA_WRAP_H
-#define CUDA_MPMA_CUDA_WRAP_H
+#pragma once
 
 #include <cstdio>
 #include <cstdlib>
@@ -38,5 +37,3 @@ cuda_print_errmsg(cudaError err, const char *msg, const char *file, const int li
     cuda_check(cudaMemcpy(dest, src, size, cudaMemcpyDeviceToDevice), "copy on device")
 #define cuda_memset(dest, val, size)                        \
     cuda_check(cudaMemset(dest, val, size), "memset on device")
-
-#endif
