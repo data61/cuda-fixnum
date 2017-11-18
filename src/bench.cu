@@ -67,9 +67,18 @@ int main(int argc, char *argv[]) {
     //
     // n is the number of fixnums in the array; eventually only allow
     // initialisation via a byte array or whatever
-    typedef fixnum_array< full_hand<uint64_t, 4> > fixnum_array;
+    typedef full_hand<uint32_t, 8> hand_impl;
+    typedef fixnum_array< hand_impl > fixnum_array;
     auto arr1 = fixnum_array::create(n, 5);
     auto arr2 = fixnum_array::create(n, 7);
+
+    cout << "slot width: " << hand_impl::SLOT_WIDTH << endl;
+    cout << "nslots:     " << hand_impl::NSLOTS << endl;
+
+    cout << "bytes of things: " << endl;
+    cout << "digit:  " << hand_impl::DIGIT_BYTES << endl;
+    cout << "fixnum: " << hand_impl::FIXNUM_BYTES << endl;
+    cout << "hand:   " << hand_impl::HAND_BYTES << endl;
 
     // device_op should be able to start operating on the appropriate
     // memory straight away
