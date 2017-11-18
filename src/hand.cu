@@ -68,7 +68,7 @@ public:
         }
 
     public:
-        __device__ int call(digit &r, digit a, const digit b) const {
+        __device__ int call(digit &r, digit a, digit b) const {
             int cy;
 
             r = a + b;
@@ -83,8 +83,15 @@ public:
         }
     };
 
+    struct incr_cy {
+        __device__ int call(digit &r) const {
+            digit one = (subwarp::laneIdx() == 0);
+            return add_cy()(r, r, one);
+        }
+    };
+    
     /*
-     * r = lo_half(a * b) with subwarp size width.
+     * r = lo_half(a * b)
      *
      * The "lo_half" is the product modulo 2^(???), i.e. the same size as
      * the inputs.
@@ -102,6 +109,8 @@ public:
 
                 // TODO: See if using umad.wide improves this.
                 umad_hi_cc(r, cy, aa, b, r);
+                // TODO: Could use rotate here, which is slightly
+                // cheaper than shfl_up0...
                 r = subwarp::shfl_up0(r, 1);
                 cy = subwarp::shfl_up0(cy, 1);
                 umad_lo_cc(r, cy, aa, b, r);
@@ -116,5 +125,13 @@ public:
             int off = fn_off + subwarp::laneIdx();
             (void) call(r[off], a[off], b[off]);
         }
+    };
+
+    /*
+     * a = qb + r with r < q.
+     */
+    struct quorem {
+    private:
+    public:
     };
 };
