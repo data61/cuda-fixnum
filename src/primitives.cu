@@ -72,6 +72,21 @@ umad(uint64_t &hi, uint64_t &lo, uint64_t a, uint64_t b, uint64_t c) {
          : "l"(a), "l" (b), "l"(c));
 }
 
+// lo = a * b + c (mod 2^32)
+__device__ __forceinline__ void
+umad_lo(uint32_t &lo, uint32_t a, uint32_t b, uint32_t c) {
+    asm ("mad.lo.u32 %0, %1, %2, %3;"
+         : "=r"(lo)
+         : "r"(a), "r" (b), "r"(c));
+}
+
+__device__ __forceinline__ void
+umad_hi(uint32_t &hi, uint32_t a, uint32_t b, uint32_t c) {
+    asm ("mad.hi.u32 %0, %1, %2, %3;"
+         : "=r"(hi)
+         : "r"(a), "r" (b), "r"(c));
+}
+
 // lo = a * b + c (mod 2^64)
 __device__ __forceinline__ void
 umad_lo(uint64_t &lo, uint64_t a, uint64_t b, uint64_t c) {
@@ -88,6 +103,22 @@ umad_hi(uint64_t &hi, uint64_t a, uint64_t b, uint64_t c) {
 }
 
 // as above but with carry in cy
+__device__ __forceinline__ void
+umad_lo_cc(uint32_t &lo, uint32_t &cy, uint32_t a, uint32_t b, uint32_t c) {
+    asm ("mad.lo.cc.u32 %0, %2, %3, %4;\n\t"
+         "addc.u32 %1, %1, 0;"
+         : "=r"(lo), "+r"(cy)
+         : "r"(a), "r" (b), "r"(c));
+}
+
+__device__ __forceinline__ void
+umad_hi_cc(uint32_t &lo, uint32_t &cy, uint32_t a, uint32_t b, uint32_t c) {
+    asm ("mad.hi.cc.u32 %0, %2, %3, %4;\n\t"
+         "addc.u32 %1, %1, 0;"
+         : "=r"(lo), "+r"(cy)
+         : "r"(a), "r" (b), "r"(c));
+}
+
 __device__ __forceinline__ void
 umad_lo_cc(uint64_t &lo, uint64_t &cy, uint64_t a, uint64_t b, uint64_t c) {
     asm ("mad.lo.cc.u64 %0, %2, %3, %4;\n\t"

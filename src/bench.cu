@@ -41,8 +41,7 @@ class fixnum_array {
 public:
     template< typename T >
     static fixnum_array *create(size_t nelts, T init = 0) {
-        fixnum_array *a;
-        cuda_malloc_managed(&a, sizeof(*a));
+        fixnum_array *a = new fixnum_array;
         a->nelts = nelts;
         if (nelts > 0) {
             size_t nbytes = nelts * hand_impl::FIXNUM_BYTES;
@@ -56,10 +55,9 @@ public:
 
     static fixnum_array *create(const uint8_t *data, size_t len, size_t bytes_per_elt);
 
-    void destroy() {
+    ~fixnum_array() {
         if (nelts > 0)
             cuda_free(ptr);
-        cuda_free(this);
     }
 
     int length() const {
@@ -105,11 +103,10 @@ public:
         return cy;
     }
 
-#if 0
     void mullo(const fixnum_array *other) {
-        apply_to_all(hand_impl::mullo, this, other);
+        typename hand_impl::mullo fn;
+        apply_to_all(fn, other);
     }
-#endif
 
 private:
     // FIXME: This shouldn't be public; the create function that uses
@@ -119,8 +116,8 @@ private:
     value_tp *ptr;
     int nelts;
 
-    fixnum_array();
-    ~fixnum_array();
+    fixnum_array() {  }
+
     fixnum_array(const fixnum_array &);
     fixnum_array &operator=(const fixnum_array &);
 
@@ -246,8 +243,13 @@ int main(int argc, char *argv[]) {
     cout << "arr1 = " << arr1 << endl;
     cout << "arr2 = " << arr2 << endl;
 
-    arr1->destroy();
-    arr2->destroy();
+    arr1->mullo(arr2);
+
+    cout << "arr1 = " << arr1 << endl;
+    cout << "arr2 = " << arr2 << endl;
+
+    delete arr1;
+    delete arr2;
 
     return 0;
 }

@@ -51,7 +51,7 @@ public:
 
     struct add_cy {
     private:
-        __device__ int resolve_carries(digit &r, int cy) {
+        __device__ int resolve_carries(digit &r, int cy) const {
             constexpr digit DIGIT_MAX = ~(digit)0;
             int L = subwarp::laneIdx();
             uint32_t allcarries, p, g;
@@ -69,7 +69,7 @@ public:
         }
 
     public:
-        __device__ int call(digit &r, digit a, const digit b) {
+        __device__ int call(digit &r, digit a, const digit b) const {
             int cy;
 
             r = a + b;
@@ -78,7 +78,7 @@ public:
         }
 
         // TODO: Work out how to refactor this and the sister method in mullo.
-        __device__ void operator()(int fn_off, digit *r, const digit *a, const digit *b) {
+        __device__ void operator()(int fn_off, digit *r, const digit *a, const digit *b) const {
             int off = fn_off + subwarp::laneIdx();
             (void) call(r[off], a[off], b[off]);
         }
@@ -91,7 +91,7 @@ public:
      * the inputs.
      */
     struct mullo {
-        __device__ void call(digit &r, digit a, digit b) {
+        __device__ void call(digit &r, digit a, digit b) const {
             // TODO: This should be smaller, probably uint16_t (smallest
             // possible for addition).  Strangely, the naive translation to
             // the smaller size broke; to investigate.
@@ -108,11 +108,12 @@ public:
                 umad_lo_cc(r, cy, aa, b, r);
             }
             cy = subwarp::shfl_up0(cy, 1);
-            (void) add_cy(r, r, cy);
+            constexpr add_cy add;
+            (void) add.call(r, r, cy);
         }
 
         // TODO: Work out how to refactor this and the sister method in add_cy.
-        __device__ void operator()(int fn_off, digit *r, const digit *a, const digit *b) {
+        __device__ void operator()(int fn_off, digit *r, const digit *a, const digit *b) const {
             int off = fn_off + subwarp::laneIdx();
             (void) call(r[off], a[off], b[off]);
         }
