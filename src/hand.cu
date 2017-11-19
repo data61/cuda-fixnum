@@ -128,7 +128,7 @@ public:
             return add_cy()(r, r, one);
         }
     };
-    
+
     /*
      * r = lo_half(a * b)
      *
