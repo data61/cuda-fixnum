@@ -1,4 +1,4 @@
-// -*- compile-command: "nvcc -D__STRICT_ANSI__ -ccbin clang-3.8 -std=c++11 -Xcompiler -Wall,-Wextra -g -G -lineinfo -gencode arch=compute_50,code=sm_50 -o bench bench.cu -lstdc++" -*-
+// -*- compile-command: "nvcc -ccbin gcc-5 -std=c++11 -Xcompiler -Wall,-Wextra -g -G -lineinfo -gencode arch=compute_50,code=sm_50 -o bench bench.cu -lstdc++" -*-
 
 #include <iostream>
 #include <cstring>
