@@ -71,7 +71,7 @@ void
 fixnum_array<hand_impl>::retrieve(uint8_t **dest, size_t *dest_len, int idx) const {
     *dest_len = hand_impl::FIXNUM_BYTES;
     *dest = new uint8_t[*dest_len];
-    retrieve_into(&dest, *dest_len, idx);
+    retrieve_into(*dest, *dest_len, idx);
 }
 
 template< typename hand_impl >

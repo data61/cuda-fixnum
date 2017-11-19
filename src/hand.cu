@@ -59,6 +59,7 @@ public:
             g = subwarp::ballot(cy);                  // carry generate
             p = subwarp::ballot(r == DIGIT_MAX);      // carry propagate
             allcarries = (p | g) + g;                 // propagate all carries
+            // FIXME: This is not correct when WIDTH != warpSize
             cy_hi = allcarries < g;                   // detect final overflow
             allcarries = (allcarries ^ p) | (g << 1); // get effective carries
             r += (allcarries >> L) & 1;
@@ -68,7 +69,7 @@ public:
         }
 
     public:
-        __device__ int call(digit &r, digit a, const digit b) const {
+        __device__ int call(digit &r, digit a, digit b) const {
             int cy;
 
             r = a + b;
@@ -83,8 +84,53 @@ public:
         }
     };
 
+    struct sub_br {
+    private:
+        __device__ int resolve_borrows(digit &r, int cy) const {
+            // FIXME: This is at best a half-baked attempt to adapt
+            // the carry propagation code above to the case of
+            // subtraction.
+            constexpr digit DIGIT_MIN = 0;
+            int L = subwarp::laneIdx();
+            uint32_t allcarries, p, g;
+            int cy_hi;
+
+            g = ~subwarp::ballot(cy);                  // carry generate
+            p = ~subwarp::ballot(r == DIGIT_MIN);      // carry propagate
+            allcarries = (p & g) - g;                 // propagate all carries
+            // FIXME: This is not correct when WIDTH != warpSize
+            cy_hi = allcarries > g;                   // detect final underflow
+            allcarries = (allcarries ^ p) | (g >> 1); // get effective carries
+            r -= (allcarries >> L) & 1;
+
+            // return highest carry
+            return cy_hi;
+        }
+
+    public:
+        __device__ int call(digit &r, digit a, digit b) const {
+            int br;
+
+            r = a - b;
+            br = r > a;
+            return resolve_borrows(r, br);
+        }
+
+        __device__ void operator()(int fn_off, digit *r, const digit *a, const digit *b) const {
+            int off = fn_off + subwarp::laneIdx();
+            (void) call(r[off], a[off], b[off]);
+        }
+    };
+
+    struct incr_cy {
+        __device__ int call(digit &r) const {
+            digit one = (subwarp::laneIdx() == 0);
+            return add_cy()(r, r, one);
+        }
+    };
+    
     /*
-     * r = lo_half(a * b) with subwarp size width.
+     * r = lo_half(a * b)
      *
      * The "lo_half" is the product modulo 2^(???), i.e. the same size as
      * the inputs.
@@ -102,6 +148,8 @@ public:
 
                 // TODO: See if using umad.wide improves this.
                 umad_hi_cc(r, cy, aa, b, r);
+                // TODO: Could use rotate here, which is slightly
+                // cheaper than shfl_up0...
                 r = subwarp::shfl_up0(r, 1);
                 cy = subwarp::shfl_up0(cy, 1);
                 umad_lo_cc(r, cy, aa, b, r);
@@ -116,5 +164,13 @@ public:
             int off = fn_off + subwarp::laneIdx();
             (void) call(r[off], a[off], b[off]);
         }
+    };
+
+    /*
+     * a = qb + r with r < q.
+     */
+    struct quorem {
+    private:
+    public:
     };
 };
