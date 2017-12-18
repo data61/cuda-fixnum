@@ -117,6 +117,7 @@ fixnum_array<hand_impl>::apply_to_all(Func fn, const fixnum_array<hand_impl> *sr
 //         cuda_stream_attach_mem(stream, ptr);
         cuda_check(cudaStreamSynchronize(stream), "stream sync");
 
+        // FIXME: Shouldn't alias ptr!
         dispatch<hand_impl><<< nblocks, BLOCK_SIZE, 0, stream >>>(fn, nelts, ptr, ptr, src->ptr);
 
         cuda_check(cudaPeekAtLastError(), "kernel invocation/run");
