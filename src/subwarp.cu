@@ -14,14 +14,9 @@ static constexpr int WARPSIZE = 32;
  * 32 threads executed in lock-step by the GPU (thus obviating the
  * need for explicit synchronisation). For any w > 1 that divides 32,
  * a warp can be partitioned into 32/w subwarps of w threads.  The
- * functions below take a parameter "width" which specifies the
- * subwarp size, and which thereby specifies the size of the numbers
- * on which they operate.
- *
- * More specifically, for a width w, the numbers are w digit_t's long,
- * with the ith digit_t in lane i of the subwarp.  So a subwarp of
- * size w is operating on numbers at most 2^(64 * w), since digit_t's
- * are 64 bits.
+ * struct below takes a parameter "width" which specifies the subwarp
+ * size, and which thereby specifies the size of the numbers on which
+ * its functions operate.
  *
  * The term "warp" should be reserved for subwarps of width 32
  * (=warpSize).
