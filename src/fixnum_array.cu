@@ -13,10 +13,8 @@ dispatch(Func fn, int nelts, Args... args) {
     int fn_idx = (blk_tid_offset + tid_in_blk) / Hand::SLOT_WIDTH;
 
     if (fn_idx < nelts) {
-        int off = fn_idx * Hand::SLOT_WIDTH;
-
         //dest->ptr + off, dest->ptr + off, src->ptr + off);
-        fn(off, args...);
+        Hand::call(fn, fn_idx, args...);
     }
 }
 

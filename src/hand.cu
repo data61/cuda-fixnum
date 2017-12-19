@@ -48,6 +48,21 @@ public:
 
     // multiply-by-zero-or-one
 
+    template< typename T >
+    static __device__ T &displace(int off, T *ptr) {
+        return ptr[off];
+    }
+
+    template< typename Func, typename... Args >
+    static __device__ void call(Func fn, int fn_idx, Args... args) {
+        int off = fn_idx * SLOT_WIDTH + subwarp::laneIdx();
+        // This abomination creates an argument list from args that
+        // replaces each ptr in args with ptr[off].
+        //(void) fn.call([off] (auto ptr) { return ptr[off]; } (args)...);
+        // FIXME: Work out how to return the return value properly
+        (void) fn.call(displace(off, args)...);
+    }
+
     struct add_cy {
     private:
         __device__ int resolve_carries(digit &r, int cy) const {
@@ -75,12 +90,6 @@ public:
             r = a + b;
             cy = r < a;
             return resolve_carries(r, cy);
-        }
-
-        // TODO: Work out how to refactor this and the sister method in mullo.
-        __device__ void operator()(int fn_off, digit *r, const digit *a, const digit *b) const {
-            int off = fn_off + subwarp::laneIdx();
-            (void) call(r[off], a[off], b[off]);
         }
     };
 
@@ -115,11 +124,6 @@ public:
             br = r > a;
             return resolve_borrows(r, br);
         }
-
-        __device__ void operator()(int fn_off, digit *r, const digit *a, const digit *b) const {
-            int off = fn_off + subwarp::laneIdx();
-            (void) call(r[off], a[off], b[off]);
-        }
     };
 
     struct incr_cy {
@@ -128,7 +132,7 @@ public:
             return add_cy()(r, r, one);
         }
     };
-    
+
     /*
      * r = lo_half(a * b)
      *
@@ -157,12 +161,6 @@ public:
             cy = subwarp::shfl_up0(cy, 1);
             constexpr add_cy add;
             (void) add.call(r, r, cy);
-        }
-
-        // TODO: Work out how to refactor this and the sister method in add_cy.
-        __device__ void operator()(int fn_off, digit *r, const digit *a, const digit *b) const {
-            int off = fn_off + subwarp::laneIdx();
-            (void) call(r[off], a[off], b[off]);
         }
     };
 
