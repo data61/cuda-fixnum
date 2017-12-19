@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 // parameterised by
 // hand implementation, which determines #bits per fixnum
 //   and which is itself parameterised by
