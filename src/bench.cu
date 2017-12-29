@@ -13,8 +13,9 @@ using namespace std;
 //
 // FIXME: Passing this to map as an object probably makes inlining
 // impossible in most circumstances.
-template< typename T, typename subwarp_data >
+template< typename hand_impl >
 struct device_op {
+    typedef typename hand_impl::digit digit;
     int _x;
 
     device_op(int x) : _x(x) { }
@@ -26,10 +27,9 @@ struct device_op {
     // This function should be available from the hand_impl; this sort
     // of function should be implemented in terms of the hand_impl
     // functions.
-    __device__ void
-    operator()(T &s, T &cy, T a, T b) {
-        s = a + b;
-        cy = s < a;
+    __device__ void operator()(digit &s, digit a, digit b) {
+        hand_impl::add_cy(s, a, b);
+        hand_impl::mullo(s, s, b);
     }
 };
 

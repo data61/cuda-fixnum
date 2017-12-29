@@ -48,19 +48,11 @@ public:
 
     // multiply-by-zero-or-one
 
-    template< typename T >
-    static __device__ T &displace(int off, T *ptr) {
-        return ptr[off];
-    }
-
     template< typename Func, typename... Args >
     static __device__ void call(Func fn, int fn_idx, Args... args) {
         int off = fn_idx * SLOT_WIDTH + subwarp::laneIdx();
-        // This abomination creates an argument list from args that
-        // replaces each ptr in args with ptr[off].
-        //(void) fn.call([off] (auto ptr) { return ptr[off]; } (args)...);
         // FIXME: Work out how to return the return value properly
-        (void) fn.call(displace(off, args)...);
+        (void) fn.call(args[off]...);
     }
 
     struct add_cy {

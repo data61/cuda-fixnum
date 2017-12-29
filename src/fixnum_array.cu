@@ -5,9 +5,13 @@
 
 // TODO: Passing both Hand and Func is ugly; Hand should be implicit
 // in Func.
-template< typename Hand, typename Func, typename... Args >
+template< typename Func, typename... Args >
 __global__ void
 dispatch(Func fn, int nelts, Args... args) {
+
+    // TODO NEXT: This stuff should go in some pre/post-hook code in
+    // some parent class for device functions
+    
     int blk_tid_offset = blockDim.x * blockIdx.x;
     int tid_in_blk = threadIdx.x;
     int fn_idx = (blk_tid_offset + tid_in_blk) / Hand::SLOT_WIDTH;
@@ -16,6 +20,10 @@ dispatch(Func fn, int nelts, Args... args) {
         //dest->ptr + off, dest->ptr + off, src->ptr + off);
         Hand::call(fn, fn_idx, args...);
     }
+
+    // NEXT: just use this
+    
+    fn(nelts, args...);
 }
 
 template< typename hand_impl >
@@ -84,18 +92,23 @@ fixnum_array<hand_impl>::retrieve_all(uint8_t **dest, size_t *dest_len, size_t *
     cuda_memcpy_from_device(*dest, ptr, nbytes);
 }
 
-template< typename hand_impl >
-template< typename Func >
+// TODO: Currently restricted to a single return value of type
+// fixnum_array. We might want to return multiple values, possible of
+// plain arrays (e.g. add_cy could return a fixnum_array and an int
+// array).
+template< typename Func, typename... Args >
 void
-fixnum_array<hand_impl>::apply_to_all(Func fn, const fixnum_array<hand_impl> *src, clock_t *t) {
+mapcar(Func fn, Args... args) {
     // TODO: Set this to the number of threads on a single SM on the host GPU.
     constexpr int BLOCK_SIZE = 192;
 
-    // dest and src must be the same length
-    assert(nelts == src->nelts);
     // BLOCK_SIZE must be a multiple of warpSize
     static_assert(!(BLOCK_SIZE % WARPSIZE),
             "block size must be a multiple of warpSize");
+
+    // FIXME: check that arrays are all the same length. Or find the minimum
+    // length and use that?
+    //assert(nelts == src->nelts);
 
     // FIXME: Check this calculation
     //int fixnums_per_block = (BLOCK_SIZE / warpSize) * hand_impl::NSLOTS;
@@ -115,8 +128,7 @@ fixnum_array<hand_impl>::apply_to_all(Func fn, const fixnum_array<hand_impl> *sr
 //         cuda_stream_attach_mem(stream, ptr);
         cuda_check(cudaStreamSynchronize(stream), "stream sync");
 
-        // FIXME: Shouldn't alias ptr!
-        dispatch<hand_impl><<< nblocks, BLOCK_SIZE, 0, stream >>>(fn, nelts, ptr, ptr, src->ptr);
+        dispatch<<< nblocks, BLOCK_SIZE, 0, stream >>>(fn, nelts, args...);
 
         cuda_check(cudaPeekAtLastError(), "kernel invocation/run");
         cuda_check(cudaStreamSynchronize(stream), "stream sync");
