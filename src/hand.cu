@@ -58,6 +58,7 @@ public:
     struct add_cy {
     private:
         __device__ int resolve_carries(digit &r, int cy) const {
+            // FIXME: Use std::numeric_limits<digit>::max
             constexpr digit DIGIT_MAX = ~(digit)0;
             int L = subwarp::laneIdx();
             uint32_t allcarries, p, g;
@@ -91,6 +92,7 @@ public:
             // FIXME: This is at best a half-baked attempt to adapt
             // the carry propagation code above to the case of
             // subtraction.
+            // FIXME: Use std::numeric_limits<digit>::min
             constexpr digit DIGIT_MIN = 0;
             int L = subwarp::laneIdx();
             uint32_t allcarries, p, g;

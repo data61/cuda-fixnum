@@ -1,5 +1,7 @@
 #pragma once
 
+#include "slot_layout.cu"
+
 template< int FIXNUM_BYTES, typename register_tp = uint32_t >
 class my_fixnum_impl {
     // TODO: static_assert's restricting FIXNUM_BYTES
@@ -8,8 +10,10 @@ class my_fixnum_impl {
     typedef slot_layout< FIXNUM_BYTES / sizeof(register_tp) > slot_layout;
 
 public:
-    typedef typename register_tp fixnum;
+    typedef register_tp fixnum;
     static constexpr int STORAGE_BYTES = FIXNUM_BYTES;
+    // FIXME: Not obviously the right thing to do:
+    static constexpr int THREADS_PER_FIXNUM = slot_layout::SLOT_WIDTH;
 
     // FIXME: This probably belongs in map or array or something
     __device__ static int get_fn_idx() {
@@ -36,7 +40,9 @@ public:
             // Recall [CCPG, Section 4] that the nVidia GPU architecture
             // is little-endian, so this cast/dereference is safe from
             // endian issues.
-            register_tp d = *static_cast< const register_tp * >(r_bytes);
+            // FIXME: Not sure why this static cast fails
+            //register_tp d = *static_cast< const register_tp * >(r_bytes);
+            register_tp d = *(const register_tp *)r_bytes;
 
             // With more sophisticated fixnum implementations (e.g. with
             // nail bits) we might have to manipulate d to obtain the
@@ -76,38 +82,8 @@ public:
     }
 };
 
-// FIXME: Need to make managed memory!
-template< typename fixnum_impl >
-struct set_const : public function<fixnum_impl, set_const> {
-    uint8_t *bytes;
-    int nbytes;
-
-    template< typename T >
-    set_const(T init) {
-        nbytes = sizeof(T);
-
-        cuda_malloc(&bytes, nbytes);
-        // FIXME: Assumes endianness of host and device are the same (LE).
-        cuda_memcpy_to_device(bytes, &init, nbytes);
-    }
-
-    set_const(const uint8_t *bytes_, int nbytes_) : nbytes(nbytes_) {
-        cuda_malloc(&bytes, nbytes);
-        cuda_memcpy_to_device(bytes, bytes_, nbytes);
-    }
-
-    ~set_const() {
-        cuda_free(bytes);
-    }
-
-    // FIXME: Not sure that nbytes is accessible here on the device!
-    __device__ call(fixnum &s) {
-        fixnum_impl::from_bytes(s, bytes, nbytes);
-    }
-};
 
 #if 0
-
 template<
   int FIXNUM_BYTES,
   typename Tdigit_tp = uint32_t,

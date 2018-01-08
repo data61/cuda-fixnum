@@ -1,5 +1,11 @@
+#include <algorithm> // for min
+
 #include "cuda_wrap.h"
 #include "fixnum_array.h"
+#include "primitives.cu"
+
+template< typename fixnum_impl >
+struct set_const;
 
 template< typename fixnum_impl >
 template< typename T >
@@ -10,7 +16,7 @@ fixnum_array<fixnum_impl>::create(size_t nelts, T init) {
     if (nelts > 0) {
         size_t nbytes = nelts * fixnum_impl::STORAGE_BYTES;
         cuda_malloc(&a->ptr, nbytes);
-        fixnum_array::map(set_const(init), a);
+        fixnum_array::map(set_const<fixnum_impl>(init), a);
     }
     return a;
 }
@@ -76,7 +82,7 @@ dispatch(function<fixnum_impl, Func> fn, int nelts, Args... args) {
 
 template< typename fixnum_impl >
 template< typename Func, typename... Args >
-static void
+void
 fixnum_array<fixnum_impl>::map(function<fixnum_impl, Func> fn, Args... args) {
     // TODO: Set this to the number of threads on a single SM on the host GPU.
     constexpr int BLOCK_SIZE = 192;
@@ -85,19 +91,18 @@ fixnum_array<fixnum_impl>::map(function<fixnum_impl, Func> fn, Args... args) {
     static_assert(!(BLOCK_SIZE % WARPSIZE),
             "block size must be a multiple of warpSize");
 
-    // FIXME: check that arrays are all the same length. Or find the minimum
-    // length and use that?
-    //assert(nelts == src->nelts);
+    int nelts = std::min( { args->length()... } );
 
     // FIXME: Check this calculation
     //int fixnums_per_block = (BLOCK_SIZE / warpSize) * fixnum_impl::NSLOTS;
-    constexpr int fixnums_per_block = BLOCK_SIZE / fixnum_impl::SLOT_WIDTH;
+    constexpr int fixnums_per_block = BLOCK_SIZE / fixnum_impl::THREADS_PER_FIXNUM;
 
     // FIXME: nblocks could be too big for a single kernel call to handle
-    int nblocks = iceil(src->nelts, fixnums_per_block);
+    int nblocks = iceil(nelts, fixnums_per_block);
 
-    if (t) *t = clock();
-    // nblocks > 0 iff src->nelts > 0
+//    if (t) *t = clock();
+
+    // nblocks > 0 iff nelts > 0
     if (nblocks > 0) {
         cudaStream_t stream;
         cuda_check(cudaStreamCreate(&stream), "create stream");
@@ -107,11 +112,12 @@ fixnum_array<fixnum_impl>::map(function<fixnum_impl, Func> fn, Args... args) {
 //         cuda_stream_attach_mem(stream, ptr);
         cuda_check(cudaStreamSynchronize(stream), "stream sync");
 
-        dispatch<<< nblocks, BLOCK_SIZE, 0, stream >>>(fn, nelts, args...);
+        dispatch<<< nblocks, BLOCK_SIZE, 0, stream >>>(fn, nelts, args->ptr...);
 
         cuda_check(cudaPeekAtLastError(), "kernel invocation/run");
         cuda_check(cudaStreamSynchronize(stream), "stream sync");
         cuda_check(cudaStreamDestroy(stream), "stream destroy");
     }
-    if (t) *t = clock() - *t;
+
+//    if (t) *t = clock() - *t;
 }

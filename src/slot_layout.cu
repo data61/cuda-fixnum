@@ -37,6 +37,7 @@ struct slot_layout
     static_assert(width > 0 && !(WARPSIZE & (width - 1)),
         "slot width must be a positive divisor of warpSize (=32)");
 
+    static constexpr int SLOT_WIDTH = width;
     /*
      * Return the lane index within the slot.
      *
