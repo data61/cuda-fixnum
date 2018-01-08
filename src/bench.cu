@@ -8,9 +8,25 @@
 
 using namespace std;
 
+// From: https://devblogs.nvidia.com/parallelforall/unified-memory-in-cuda-6/
+class Managed {
+public:
+    void *operator new(size_t len) {
+        void *ptr;
+        cudaMallocManaged(&ptr, len);
+        cudaDeviceSynchronize();
+        return ptr;
+    }
+
+    void operator delete(void *ptr) {
+        cudaDeviceSynchronize();
+        cudaFree(ptr);
+    }
+};
+
 // TODO: functions should probably all be 'managed memory'
 template< typename fixnum_impl, typename Func >
-struct function {
+struct function : public Managed {
     // Make this available to derived classes
     typedef typename fixnum_impl::fixnum fixnum;
 
@@ -21,7 +37,7 @@ struct function {
 };
 
 template< typename fixnum_impl >
-struct ec_add : function<fixnum_impl, ec_add> {
+struct ec_add : public function<fixnum_impl, ec_add> {
     ec_add(/* ec params */) { }
 
     __device__ void call(fixnum &r, fixnum a, fixnum b) {

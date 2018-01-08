@@ -9,7 +9,7 @@ class my_fixnum_impl {
 
 public:
     typedef typename register_tp fixnum;
-    constexpr int STORAGE_BYTES = FIXNUM_BYTES;
+    static constexpr int STORAGE_BYTES = FIXNUM_BYTES;
 
     // FIXME: This probably belongs in map or array or something
     __device__ static int get_fn_idx() {
@@ -76,44 +76,35 @@ public:
     }
 };
 
-
+// FIXME: Need to make managed memory!
 template< typename fixnum_impl >
-struct set_const : function<fixnum_impl, set_const> {
-    uint8_t bytes[FIXNUM_BYTES]; // managed?
+struct set_const : public function<fixnum_impl, set_const> {
+    uint8_t *bytes;
+    int nbytes;
 
     template< typename T >
     set_const(T init) {
-        constexpr int n = sizeof(T);
-        static_assert(n < FIXNUM_BYTES, "Initialiser too large");
+        nbytes = sizeof(T);
 
-        memcpy(bytes, &init, n);
-        memset(bytes + n, 0, FIXNUM_BYTES - n);
-    }
-
-    __device__ call(fixnum &s) {
-        fixnum_impl::from_bytes(s, bytes, FIXNUM_BYTES);
-    }
-};
- 
-
-#if 0
-    // Only needed if we can't make bytes managed.
-    template< typename T >
-    set_const(T init) {
-        constexpr int n = sizeof(T);
-        static_assert(n < FIXNUM_BYTES, "Initialiser too large");
-
-        cuda_malloc(&bytes, FIXNUM_BYTES);
-        cuda_memset(bytes, 0, FIXNUM_BYTES);
+        cuda_malloc(&bytes, nbytes);
         // FIXME: Assumes endianness of host and device are the same (LE).
-        cuda_memcpy_to_device(digits, &init, n);
+        cuda_memcpy_to_device(bytes, &init, nbytes);
+    }
+
+    set_const(const uint8_t *bytes_, int nbytes_) : nbytes(nbytes_) {
+        cuda_malloc(&bytes, nbytes);
+        cuda_memcpy_to_device(bytes, bytes_, nbytes);
     }
 
     ~set_const() {
-        cuda_free(digits);
+        cuda_free(bytes);
     }
-#endif
 
+    // FIXME: Not sure that nbytes is accessible here on the device!
+    __device__ call(fixnum &s) {
+        fixnum_impl::from_bytes(s, bytes, nbytes);
+    }
+};
 
 #if 0
 
