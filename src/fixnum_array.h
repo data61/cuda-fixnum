@@ -11,8 +11,6 @@
 template< typename fixnum_impl >
 class fixnum_array {
 public:
-    typedef typename fixnum_impl fixnum_impl;
-
     template< typename T >
     static fixnum_array *create(size_t nelts, T init = 0);
     static fixnum_array *create(const uint8_t *data, size_t len, size_t bytes_per_elt);
@@ -28,6 +26,9 @@ public:
     template< typename Func, typename... Args >
     static void map(Func fn, Args... args);
     
+    template< typename Func, typename... Args >
+    static void map(function<fixnum_impl, Func> fn, Args... args);
+
 private:
     typedef typename fixnum_impl::digit_tp digit_tp;
     digit_tp *ptr;

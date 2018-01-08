@@ -8,41 +8,26 @@
 
 using namespace std;
 
-// FIXME: Ignore this idea of feeding in new operations for now; just
-// use a fixed set of operations determined by hand_impl
-//
-// FIXME: Passing this to map as an object probably makes inlining
-// impossible in most circumstances.
-template< typename hand_impl >
-struct device_op {
-    typedef typename hand_impl::digit digit;
-    int _x;
+// TODO: functions should probably all be 'managed memory'
+template< typename fixnum_impl, typename Func >
+struct function {
+    // Make this available to derived classes
+    typedef typename fixnum_impl::fixnum fixnum;
 
-    device_op(int x) : _x(x) { }
-
-    // A fixnum is represented by a register across a subwarp. This
-    // thread is responsible for the Lth registers of the arguments,
-    // where L is the lane index.
-    //
-    // This function should be available from the hand_impl; this sort
-    // of function should be implemented in terms of the hand_impl
-    // functions.
-    __device__ void operator()(digit &s, digit a, digit b) {
-        hand_impl::add_cy(s, a, b);
-        hand_impl::mullo(s, s, b);
+    template< typename... Args >
+    __device__ void operator()(Args... args) {
+        static_cast< Func * >(this)->call(args);
     }
 };
 
-template< typename fixnum >
-struct ec_add {
-
+template< typename fixnum_impl >
+struct ec_add : function<fixnum_impl, ec_add> {
     ec_add(/* ec params */) { }
 
-    __device__ void operator()(fixnum &s, fixnum a, fixnum b) {
-        fixnum::mullo(s, a, b);
+    __device__ void call(fixnum &s, fixnum a, fixnum b) {
+        fixnum_impl::mul_lo(s, a, b);
     }
 };
-
 
 template< int FIXNUM_BYTES >
 ostream &
@@ -72,7 +57,7 @@ int main(int argc, char *argv[]) {
     // n is the number of fixnums in the array; eventually only allow
     // initialisation via a byte array or whatever
     typedef my_fixnum_impl<16> fixnum_impl;
-    typedef fixnum_array<fixnum_imlp> fixnum_array;
+    typedef fixnum_array<fixnum_impl> fixnum_array;
     auto res = fixnum_array::create(n);
     auto arr1 = fixnum_array::create(n, 5);
     auto arr2 = fixnum_array::create(n, 7);
@@ -89,7 +74,7 @@ int main(int argc, char *argv[]) {
     // where each element is only 0 or 1? Need fixnum_array to have
     // C-array semantics, hence allowing other C arrays to be used
     // alongside, so pass an int* to collect the carries.
-    fixnum_array::map(fixnum_impl::add_cy(), res, arr1, arr2);
+    fixnum_array::map(ec_add(), res, arr1, arr2);
 
     cout << "res  = " << res << endl;
     cout << "arr1 = " << arr1 << endl;

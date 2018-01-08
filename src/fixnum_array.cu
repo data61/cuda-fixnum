@@ -1,5 +1,4 @@
 #include "cuda_wrap.h"
-
 #include "fixnum_array.h"
 
 template< typename fixnum_impl >
@@ -9,32 +8,30 @@ fixnum_array<fixnum_impl>::create(size_t nelts, T init) {
     fixnum_array *a = new fixnum_array;
     a->nelts = nelts;
     if (nelts > 0) {
-        size_t nbytes = nelts * FIXNUM_BYTES;
-        int c = static_cast<int>(init);
+        size_t nbytes = nelts * fixnum_impl::STORAGE_BYTES;
         cuda_malloc(&a->ptr, nbytes);
-        // FIXME: Obviously should use zeros and init somehow
-        cuda_memset(a->ptr, c, nbytes);
+        fixnum_array::map(fixnum_impl::set_const(init), a);
     }
     return a;
 }
 
 
-template< typename hand_impl >
-fixnum_array<hand_impl>::~fixnum_array() {
+template< typename fixnum_impl >
+fixnum_array<fixnum_impl>::~fixnum_array() {
     if (nelts > 0)
         cuda_free(ptr);
 }
 
-template< typename hand_impl >
+template< typename fixnum_impl >
 int
-fixnum_array<hand_impl>::length() const {
+fixnum_array<fixnum_impl>::length() const {
     return nelts;
 }
 
-template< typename hand_impl >
+template< typename fixnum_impl >
 size_t
-fixnum_array<hand_impl>::retrieve_into(uint8_t *dest, size_t dest_space, int idx) const {
-    size_t nbytes = hand_impl::FIXNUM_BYTES;
+fixnum_array<fixnum_impl>::retrieve_into(uint8_t *dest, size_t dest_space, int idx) const {
+    constexpr size_t nbytes = fixnum_impl::FIXNUM_BYTES;
     if (dest_space < nbytes || idx < 0 || idx > nelts) {
         // FIXME: This is not the right way to handle an
         // "insufficient space" error or an "index out of bounds"
@@ -44,24 +41,24 @@ fixnum_array<hand_impl>::retrieve_into(uint8_t *dest, size_t dest_space, int idx
     // clear all of dest
     // TODO: Is this necessary? Should it be optional?
     memset(dest, 0, dest_space);
-    cuda_memcpy_from_device(dest, ptr + idx * hand_impl::SLOT_WIDTH, nbytes);
+    cuda_memcpy_from_device(dest, ptr + idx * fixnum_impl::SLOT_WIDTH, nbytes);
     return nbytes;
 }
 
-template< typename hand_impl >
+template< typename fixnum_impl >
 void
-fixnum_array<hand_impl>::retrieve(uint8_t **dest, size_t *dest_len, int idx) const {
-    *dest_len = hand_impl::FIXNUM_BYTES;
+fixnum_array<fixnum_impl>::retrieve(uint8_t **dest, size_t *dest_len, int idx) const {
+    *dest_len = fixnum_impl::FIXNUM_BYTES;
     *dest = new uint8_t[*dest_len];
     retrieve_into(*dest, *dest_len, idx);
 }
 
-template< typename hand_impl >
+template< typename fixnum_impl >
 void
-fixnum_array<hand_impl>::retrieve_all(uint8_t **dest, size_t *dest_len, size_t *nelts) const {
+fixnum_array<fixnum_impl>::retrieve_all(uint8_t **dest, size_t *dest_len, size_t *nelts) const {
     size_t nbytes;
     *nelts = this->nelts;
-    nbytes = *nelts * hand_impl::FIXNUM_BYTES;
+    nbytes = *nelts * fixnum_impl::FIXNUM_BYTES;
     *dest = new uint8_t[nbytes];
     // FIXME: This won't correctly zero-pad each element
     memset(dest, 0, nbytes);
@@ -69,21 +66,18 @@ fixnum_array<hand_impl>::retrieve_all(uint8_t **dest, size_t *dest_len, size_t *
 }
 
 
-// TODO: Passing both Hand and Func is ugly; Hand should be implicit
-// in Func.
-template< typename Func, typename... Args >
+template< typename fixnum_impl, typename Func, typename... Args >
 __global__ void
-dispatch(Func fn, int nelts, Args... args) {
-    typedef typename Func::fixnum_impl fixnum_impl;
+dispatch(function<fixnum_impl, Func> fn, int nelts, Args... args) {
     int fn_idx = fixnum_impl::get_fn_idx();
     if (fn_idx < nelts)
-        fn(fixnum_impl::load(fn_idx, args)...);
+        fn(fixnum_impl::load(args, fn_idx)...);
 }
 
 template< typename fixnum_impl >
 template< typename Func, typename... Args >
 static void
-fixnum_array<fixnum_impl>::map(Func fn, Args... args) {
+fixnum_array<fixnum_impl>::map(function<fixnum_impl, Func> fn, Args... args) {
     // TODO: Set this to the number of threads on a single SM on the host GPU.
     constexpr int BLOCK_SIZE = 192;
 
@@ -96,7 +90,7 @@ fixnum_array<fixnum_impl>::map(Func fn, Args... args) {
     //assert(nelts == src->nelts);
 
     // FIXME: Check this calculation
-    //int fixnums_per_block = (BLOCK_SIZE / warpSize) * hand_impl::NSLOTS;
+    //int fixnums_per_block = (BLOCK_SIZE / warpSize) * fixnum_impl::NSLOTS;
     constexpr int fixnums_per_block = BLOCK_SIZE / fixnum_impl::SLOT_WIDTH;
 
     // FIXME: nblocks could be too big for a single kernel call to handle
