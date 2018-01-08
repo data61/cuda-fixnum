@@ -24,8 +24,8 @@ template< typename fixnum_impl >
 struct ec_add : function<fixnum_impl, ec_add> {
     ec_add(/* ec params */) { }
 
-    __device__ void call(fixnum &s, fixnum a, fixnum b) {
-        fixnum_impl::mul_lo(s, a, b);
+    __device__ void call(fixnum &r, fixnum a, fixnum b) {
+        fixnum_impl::mul_lo(r, a, b);
     }
 };
 

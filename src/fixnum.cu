@@ -3,11 +3,13 @@
 template< int FIXNUM_BYTES, typename register_tp = uint32_t >
 class my_fixnum_impl {
     // TODO: static_assert's restricting FIXNUM_BYTES
+    // FIXME: What if FIXNUM_BYTES < sizeof(register_tp)?
     
     typedef slot_layout< FIXNUM_BYTES / sizeof(register_tp) > slot_layout;
 
 public:
     typedef typename register_tp fixnum;
+    constexpr int STORAGE_BYTES = FIXNUM_BYTES;
 
     // FIXME: This probably belongs in map or array or something
     __device__ static int get_fn_idx() {
@@ -17,7 +19,45 @@ public:
         return fn_idx;
     }
 
-    __device__ static void from_bytes(fixnum &s, const uint8_t *bytes, size_t nbytes) {
+    // Assume bytes represents a number \sum_{i=0}^{nbytes-1} bytes[i] * 256^i
+    // If nbytes > FIXNUM_BYTES, then the last (nbytes - FIXNUM_BYTES) are ignored.
+    // If nbytes = 0, then r is assigned 0.
+    __device__ static void from_bytes(fixnum &r, const uint8_t *bytes, int nbytes) {
+        int L = slot_layout::laneIdx();
+        int nregs = nbytes / sizeof(register_tp);
+        int lastsz = nbytes % sizeof(register_tp);
+        const uint8_t *r_bytes = bytes + L * sizeof(register_tp);
+
+        r = 0;
+
+        // This will cause warp divergence when nbytes is not
+        // divisible by sizeof(register_tp).
+        if (L < nregs) {
+            // Recall [CCPG, Section 4] that the nVidia GPU architecture
+            // is little-endian, so this cast/dereference is safe from
+            // endian issues.
+            register_tp d = *static_cast< const register_tp * >(r_bytes);
+
+            // With more sophisticated fixnum implementations (e.g. with
+            // nail bits) we might have to manipulate d to obtain the
+            // correct value of r.
+            r = d;
+        } else if (lastsz && L == nregs) {
+            // Construct r from the leftover bytes one-by-one.
+            for (int i = 0; i < lastsz; ++i)
+                r |= r_bytes[i] << (8*i); // 8 is "bits in byte"
+        }
+    }
+
+    // Translate a to a byte array represented by \sum_{i=0}^{nbytes-1} bytes[i] * 256^i
+    // Assumes bytes points to (at least) FIXNUM_BYTES of space.
+    __device__ static void to_bytes(uint8_t *bytes, fixnum a) {
+        int L = slot_layout::laneIdx();
+        register_tp *out = static_cast< register_tp * >(bytes);
+        // With more sophisticated fixnum implementations (e.g. with
+        // nail bits) we might have to manipulate a to obtain the
+        // correct value of out[L].
+        out[L] = a;
     }
 
     // load the value from ptr corresponding to this thread (lane).
@@ -27,49 +67,55 @@ public:
         return ptr[off];
     }
     
-    __device__ static void add_cy(fixnum &s, /*int &cy,*/ fixnum a, fixnum b) {
-        s = a + b + slot_layout::laneIdx();
+    __device__ static void add_cy(fixnum &r, /*int &cy,*/ fixnum a, fixnum b) {
+        r = a + b + slot_layout::laneIdx();
     }
 
-    __device__ static void mul_lo(fixnum &s, fixnum a, fixnum b) {
-        s = a * b;
+    __device__ static void mul_lo(fixnum &r, fixnum a, fixnum b) {
+        r = a * b;
     }
 };
 
 
-#if 0
-
-// TODO: Should be a friend of fixnum_impl?
 template< typename fixnum_impl >
 struct set_const : function<fixnum_impl, set_const> {
-    // It would be neater to do
-    //   __device__ digit_tp digits[SLOT_WIDTH];
-    // but __device__ is not allowed here (F.3.3.1).
-    
-    //digit_tp *digits;
-    register_tp digits[SLOT_WIDTH]; // managed?
+    uint8_t bytes[FIXNUM_BYTES]; // managed?
 
     template< typename T >
     set_const(T init) {
         constexpr int n = sizeof(T);
         static_assert(n < FIXNUM_BYTES, "Initialiser too large");
 
-        cuda_malloc(&digits, storage_bytes());
-        cuda_memset(digits, 0, FIXNUM_BYTES);
-        // FIXME: Assumes endianness of host and device are the same
+        memcpy(bytes, &init, n);
+        memset(bytes + n, 0, FIXNUM_BYTES - n);
+    }
+
+    __device__ call(fixnum &s) {
+        fixnum_impl::from_bytes(s, bytes, FIXNUM_BYTES);
+    }
+};
+ 
+
+#if 0
+    // Only needed if we can't make bytes managed.
+    template< typename T >
+    set_const(T init) {
+        constexpr int n = sizeof(T);
+        static_assert(n < FIXNUM_BYTES, "Initialiser too large");
+
+        cuda_malloc(&bytes, FIXNUM_BYTES);
+        cuda_memset(bytes, 0, FIXNUM_BYTES);
+        // FIXME: Assumes endianness of host and device are the same (LE).
         cuda_memcpy_to_device(digits, &init, n);
     }
 
     ~set_const() {
         cuda_free(digits);
     }
+#endif
 
-    __device__ operator()(digit_tp &s) {
-        int L = slot_layout::laneIdx();
-        s[L] = digits[L];
-    }
-};
- 
+
+#if 0
 
 template<
   int FIXNUM_BYTES,

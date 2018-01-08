@@ -10,7 +10,7 @@ fixnum_array<fixnum_impl>::create(size_t nelts, T init) {
     if (nelts > 0) {
         size_t nbytes = nelts * fixnum_impl::STORAGE_BYTES;
         cuda_malloc(&a->ptr, nbytes);
-        fixnum_array::map(fixnum_impl::set_const(init), a);
+        fixnum_array::map(set_const(init), a);
     }
     return a;
 }
