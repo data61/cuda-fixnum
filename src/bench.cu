@@ -9,9 +9,8 @@
 
 using namespace std;
 
-// FIXME: Ugly (and apparently useless) repetition of template parameter
 template< typename fixnum_impl >
-struct set_const : public function<fixnum_impl, set_const<fixnum_impl> > {
+struct set_const : public function< set_const<fixnum_impl> > {
     // FIXME: The repetition of this is dumb and annoying
     typedef typename fixnum_impl::fixnum fixnum;
 
@@ -45,12 +44,15 @@ struct set_const : public function<fixnum_impl, set_const<fixnum_impl> > {
 // FIXME: Can I arrange for ec_add to use the fixnum_impl given to
 // fixnum_array somehow?
 template< typename fixnum_impl >
-struct ec_add : public function<fixnum_impl, ec_add<fixnum_impl> > {
+struct ec_add : public function< ec_add<fixnum_impl> > {
     typedef typename fixnum_impl::fixnum fixnum;
 
-    ec_add(/* ec params */) { }
+    set_const set_k;
+
+    ec_add(/* ec params */, long k) : set(k) { }
 
     __device__ void call(fixnum &r, fixnum a, fixnum b) {
+        set_k(r);
         fixnum_impl::mul_lo(r, a, b);
     }
 };
@@ -105,6 +107,7 @@ int main(int argc, char *argv[]) {
     // C-array semantics, hence allowing other C arrays to be used
     // alongside, so pass an int* to collect the carries.
     fixnum_array::map(ec_add<fixnum_impl>(), res, arr1, arr2);
+    fixnum_array::map<ec_add>(res, arr1, arr2);
 
     cout << "res  = " << res << endl;
     cout << "arr1 = " << arr1 << endl;

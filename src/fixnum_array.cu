@@ -72,18 +72,18 @@ fixnum_array<fixnum_impl>::retrieve_all(uint8_t **dest, size_t *dest_len, size_t
 }
 
 
-template< typename fixnum_impl, typename Func, typename... Args >
+template< template <typename> class Func, typename fixnum_impl, typename... Args >
 __global__ void
-dispatch(function<fixnum_impl, Func> fn, int nelts, Args... args) {
+dispatch(function< Func<fixnum_impl> > fn, int nelts, Args... args) {
     int fn_idx = fixnum_impl::get_fn_idx();
     if (fn_idx < nelts)
         fn(fixnum_impl::load(args, fn_idx)...);
 }
 
 template< typename fixnum_impl >
-template< typename Func, typename... Args >
+template< template <typename> class Func, typename... Args >
 void
-fixnum_array<fixnum_impl>::map(function<fixnum_impl, Func> fn, Args... args) {
+fixnum_array<fixnum_impl>::map(function< Func<fixnum_impl> > fn, Args... args) {
     // TODO: Set this to the number of threads on a single SM on the host GPU.
     constexpr int BLOCK_SIZE = 192;
 
