@@ -10,7 +10,7 @@
 using namespace std;
 
 template< typename fixnum_impl >
-struct set_const : public function< set_const<fixnum_impl> > {
+struct set_const : public Managed {
     // FIXME: The repetition of this is dumb and annoying
     typedef typename fixnum_impl::fixnum fixnum;
 
@@ -36,7 +36,7 @@ struct set_const : public function< set_const<fixnum_impl> > {
     }
 
     // FIXME: Not sure that nbytes is accessible here on the device!
-    __device__ void call(fixnum &s) {
+    __device__ void operator()(fixnum &s) {
         fixnum_impl::from_bytes(s, bytes, nbytes);
     }
 };
@@ -44,14 +44,14 @@ struct set_const : public function< set_const<fixnum_impl> > {
 // FIXME: Can I arrange for ec_add to use the fixnum_impl given to
 // fixnum_array somehow?
 template< typename fixnum_impl >
-struct ec_add : public function< ec_add<fixnum_impl> > {
+struct ec_add : public Managed {
     typedef typename fixnum_impl::fixnum fixnum;
 
-    set_const set_k;
+    set_const<fixnum_impl> set_k;
 
-    ec_add(/* ec params */, long k) : set(k) { }
+    ec_add(/* ec params */) : set_k(17) { }
 
-    __device__ void call(fixnum &r, fixnum a, fixnum b) {
+    __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
         set_k(r);
         fixnum_impl::mul_lo(r, a, b);
     }

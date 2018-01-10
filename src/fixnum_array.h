@@ -18,15 +18,6 @@ public:
     }
 };
 
-template< typename Func >
-struct function : public Managed {
-    template< typename... Args >
-    __device__ void operator()(Args... args) {
-        static_cast< Func * >(this)->call(args...);
-    }
-};
-
-
 // parameterised by
 // hand implementation, which determines #bits per fixnum
 //   and which is itself parameterised by
@@ -51,7 +42,7 @@ public:
     // Use:
     // fixnum_array::map(ec_add<fixnum_impl>(a, b), res, arr1, arr2);
     template< template <typename> class Func, typename... Args >
-    static void map(function< Func<fixnum_impl> > fn, Args... args);
+    static void map(Func<fixnum_impl> fn, Args... args);
 
     // Use 
     // fixnum_array::map<ec_add>(res, arr1, arr2);
