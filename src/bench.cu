@@ -17,16 +17,12 @@ struct set_const : public Managed {
     uint8_t *bytes;
     int nbytes;
 
+    // FIXME: Assumes endianness of host and device are the same (LE).
     template< typename T >
-    set_const(T init) {
-        nbytes = sizeof(T);
+    set_const(T init)
+    : set_const(&init, sizeof(T)) { }
 
-        cuda_malloc(&bytes, nbytes);
-        // FIXME: Assumes endianness of host and device are the same (LE).
-        cuda_memcpy_to_device(bytes, &init, nbytes);
-    }
-
-    set_const(const uint8_t *bytes_, int nbytes_) : nbytes(nbytes_) {
+    set_const(const void *bytes_, int nbytes_) : nbytes(nbytes_) {
         cuda_malloc(&bytes, nbytes);
         cuda_memcpy_to_device(bytes, bytes_, nbytes);
     }
@@ -35,7 +31,6 @@ struct set_const : public Managed {
         cuda_free(bytes);
     }
 
-    // FIXME: Not sure that nbytes is accessible here on the device!
     __device__ void operator()(fixnum &s) {
         fixnum_impl::from_bytes(s, bytes, nbytes);
     }
@@ -45,9 +40,6 @@ struct set_const : public Managed {
 // would be like making the function a host and fixnum_impl the policy
 // in a policy-based design
 // (https://en.wikipedia.org/wiki/Policy-based_design).
-//
-// FIXME: Can I arrange for ec_add to use the fixnum_impl given to
-// fixnum_array somehow?
 template< typename fixnum_impl >
 struct ec_add : public Managed {
     typedef typename fixnum_impl::fixnum fixnum;
@@ -93,8 +85,7 @@ int main(int argc, char *argv[]) {
     // initialisation via a byte array or whatever
     typedef my_fixnum_impl<16> fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
-    // FIXME: For some reason the default argument of 0 is not being
-    // picked up.
+
     auto res = fixnum_array::create(n);
     auto arr1 = fixnum_array::create(n, 5);
     auto arr2 = fixnum_array::create(n, 7);
