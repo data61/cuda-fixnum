@@ -27,8 +27,9 @@ public:
 template< typename fixnum_impl >
 class fixnum_array {
 public:
+    static fixnum_array *create(size_t nelts);
     template< typename T >
-    static fixnum_array *create(size_t nelts, T init = 0);
+    static fixnum_array *create(size_t nelts, T init);
     static fixnum_array *create(const uint8_t *data, size_t len, size_t bytes_per_elt);
 
     ~fixnum_array();

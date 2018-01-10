@@ -41,6 +41,11 @@ struct set_const : public Managed {
     }
 };
 
+// TODO: Consider having functions inherit from fixnum_impl; this
+// would be like making the function a host and fixnum_impl the policy
+// in a policy-based design
+// (https://en.wikipedia.org/wiki/Policy-based_design).
+//
 // FIXME: Can I arrange for ec_add to use the fixnum_impl given to
 // fixnum_array somehow?
 template< typename fixnum_impl >
@@ -49,7 +54,7 @@ struct ec_add : public Managed {
 
     set_const<fixnum_impl> set_k;
 
-    ec_add(/* ec params */) : set_k(17) { }
+    ec_add(/* ec params */ long k = 17) : set_k(k) { }
 
     __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
         set_k(r);
@@ -90,7 +95,7 @@ int main(int argc, char *argv[]) {
     typedef fixnum_array<fixnum_impl> fixnum_array;
     // FIXME: For some reason the default argument of 0 is not being
     // picked up.
-    auto res = fixnum_array::create(n, 0);
+    auto res = fixnum_array::create(n);
     auto arr1 = fixnum_array::create(n, 5);
     auto arr2 = fixnum_array::create(n, 7);
 

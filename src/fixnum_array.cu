@@ -8,6 +8,18 @@ template< typename fixnum_impl >
 struct set_const;
 
 template< typename fixnum_impl >
+fixnum_array<fixnum_impl> *
+fixnum_array<fixnum_impl>::create(size_t nelts) {
+    fixnum_array *a = new fixnum_array;
+    a->nelts = nelts;
+    if (nelts > 0) {
+        size_t nbytes = nelts * fixnum_impl::STORAGE_BYTES;
+        cuda_malloc(&a->ptr, nbytes);
+    }
+    return a;
+}
+
+template< typename fixnum_impl >
 template< typename T >
 fixnum_array<fixnum_impl> *
 fixnum_array<fixnum_impl>::create(size_t nelts, T init) {
@@ -16,7 +28,10 @@ fixnum_array<fixnum_impl>::create(size_t nelts, T init) {
     if (nelts > 0) {
         size_t nbytes = nelts * fixnum_impl::STORAGE_BYTES;
         cuda_malloc(&a->ptr, nbytes);
-        fixnum_array::map(set_const<fixnum_impl>(init), a);
+        if (init)
+            fixnum_array::map(set_const<fixnum_impl>(init), a);
+        else
+            cuda_memset(a->ptr, 0, nbytes);
     }
     return a;
 }
