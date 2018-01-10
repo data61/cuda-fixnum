@@ -44,13 +44,6 @@ public:
     template< template <typename> class Func, typename... Args >
     static void map(Func<fixnum_impl> fn, Args... args);
 
-    // Use 
-    // fixnum_array::map<ec_add>(res, arr1, arr2);
-    template< template <typename> class Func, typename... Args >
-    static void map(Args... args) {
-        fixnum_array::map(Func<fixnum_impl>(), args...);
-    }
-
 private:
     // FIXME: this is not the purpose of the fixnum definition, it
     // will not be a register type in general!

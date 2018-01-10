@@ -107,7 +107,6 @@ int main(int argc, char *argv[]) {
     // C-array semantics, hence allowing other C arrays to be used
     // alongside, so pass an int* to collect the carries.
     fixnum_array::map(ec_add<fixnum_impl>(), res, arr1, arr2);
-    fixnum_array::map<ec_add>(res, arr1, arr2);
 
     cout << "res  = " << res << endl;
     cout << "arr1 = " << arr1 << endl;
