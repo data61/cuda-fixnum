@@ -66,24 +66,24 @@ fixnum_array<fixnum_impl>::retrieve_into(uint8_t *dest, size_t dest_space, int i
     return nbytes;
 }
 
+// FIXME: Caller should provide the memory
+// FIXME: Should be delegating to fixnum_impl to interpret the raw data
 template< typename fixnum_impl >
 void
-fixnum_array<fixnum_impl>::retrieve(uint8_t **dest, size_t *dest_len, int idx) const {
-    *dest_len = fixnum_impl::FIXNUM_BYTES;
-    *dest = new uint8_t[*dest_len];
-    retrieve_into(*dest, *dest_len, idx);
-}
+fixnum_array<fixnum_impl>::retrieve_all(uint8_t *dest, size_t dest_space, size_t *dest_len, int *nelts) const {
+    size_t space_needed = this->nelts * fixnum_impl::STORAGE_BYTES;
 
-template< typename fixnum_impl >
-void
-fixnum_array<fixnum_impl>::retrieve_all(uint8_t **dest, size_t *dest_len, size_t *nelts) const {
-    size_t nbytes;
+    *nelts = -1; // FIXME: don't mix error values and return parameters!
+    *dest_len = 0;
+    if (space_needed > dest_space) return;
+
     *nelts = this->nelts;
-    nbytes = *nelts * fixnum_impl::FIXNUM_BYTES;
-    *dest = new uint8_t[nbytes];
-    // FIXME: This won't correctly zero-pad each element
-    memset(dest, 0, nbytes);
-    cuda_memcpy_from_device(*dest, ptr, nbytes);
+    if ( ! *nelts) return;
+
+    *dest_len = space_needed;
+    // FIXME: This won't correctly zero-pad each element in general
+    memset(dest, 0, *dest_len);
+    cuda_memcpy_from_device(dest, ptr, *dest_len);
 }
 
 

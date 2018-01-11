@@ -1,6 +1,9 @@
 // -*- compile-command: "nvcc -std=c++11 -Xcompiler -Wall,-Wextra -g -G -lineinfo -gencode arch=compute_50,code=sm_50 -o bench bench.cu" -*-
 
 #include <iostream>
+#include <iomanip>
+#include <sstream>
+#include <string>
 #include <cstring>
 #include <cassert>
 
@@ -28,6 +31,7 @@ struct set_const : public Managed {
     }
 
     ~set_const() {
+        // FIXME: Why does this break?
         cuda_free(bytes);
     }
 
@@ -54,23 +58,36 @@ struct ec_add : public Managed {
     }
 };
 
+static string fixnum_as_str(const uint8_t *fn, int nbytes) {
+    ostringstream ss;
+    ss << setfill('0') << setw(2) << hex;
+    for (int i = nbytes - 1; i >= 0; --i)
+        ss << (int)fn[i];
+    return ss.str();
+}
+
 template< typename fixnum_impl >
 ostream &
-operator<<(ostream &os, const fixnum_array<fixnum_impl> *arr) {
-    uint8_t num[231];
-    int nelts = arr->length();
+operator<<(ostream &os, const fixnum_array<fixnum_impl> *fn_arr) {
+    constexpr int fn_bytes = fixnum_impl::FIXNUM_BYTES;
+    constexpr size_t bufsz = 4096;
+    size_t nbytes;
+    uint8_t arr[bufsz];
+    int nelts;
+
+    fn_arr->retrieve_all(arr, bufsz, &nbytes, &nelts);
+    if (nelts < 0) {
+        os << "( insufficient space to retrieve array )" << endl;
+        return os;
+    }
 
     os << "( ";
-#if 0
     if (nelts > 0) {
-        (void) arr->retrieve_into(num, FIXNUM_BYTES, 0);
-        os << (int)num[0];
+        os << fixnum_as_str(arr, fn_bytes);
         for (int i = 1; i < nelts; ++i) {
-            (void) arr->retrieve_into(num, FIXNUM_BYTES, i);
-            os << ", " << (int)num[0];
+            os << ", " << fixnum_as_str(arr + i*fn_bytes, fn_bytes);
         }
     }
-#endif
     os << " )" << flush;
     return os;
 }
@@ -88,7 +105,7 @@ int main(int argc, char *argv[]) {
 
     auto res = fixnum_array::create(n);
     auto arr1 = fixnum_array::create(n, 5);
-    auto arr2 = fixnum_array::create(n, 7);
+    auto arr2 = fixnum_array::create(n, 245);
 
     cout << "res  = " << res << endl;
     cout << "arr1 = " << arr1 << endl;
@@ -102,11 +119,11 @@ int main(int argc, char *argv[]) {
     // where each element is only 0 or 1? Need fixnum_array to have
     // C-array semantics, hence allowing other C arrays to be used
     // alongside, so pass an int* to collect the carries.
-    fixnum_array::map(ec_add<fixnum_impl>(), res, arr1, arr2);
+//    fixnum_array::map(ec_add<fixnum_impl>(), res, arr1, arr2);
 
-    cout << "res  = " << res << endl;
-    cout << "arr1 = " << arr1 << endl;
-    cout << "arr2 = " << arr2 << endl;
+    // cout << "res  = " << res << endl;
+    // cout << "arr1 = " << arr1 << endl;
+    // cout << "arr2 = " << arr2 << endl;
 
     delete res;
     delete arr1;

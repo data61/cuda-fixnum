@@ -2,15 +2,16 @@
 
 #include "slot_layout.cu"
 
-template< int FIXNUM_BYTES, typename register_tp = uint32_t >
+template< int FIXNUM_BYTES_, typename register_tp = uint32_t >
 class my_fixnum_impl {
     // TODO: static_assert's restricting FIXNUM_BYTES
     // FIXME: What if FIXNUM_BYTES < sizeof(register_tp)?
     
-    typedef slot_layout< FIXNUM_BYTES / sizeof(register_tp) > slot_layout;
+    typedef slot_layout< FIXNUM_BYTES_ / sizeof(register_tp) > slot_layout;
 
 public:
     typedef register_tp fixnum;
+    static constexpr int FIXNUM_BYTES = FIXNUM_BYTES_;
     static constexpr int STORAGE_BYTES = FIXNUM_BYTES;
     // FIXME: Not obviously the right thing to do:
     static constexpr int THREADS_PER_FIXNUM = slot_layout::SLOT_WIDTH;

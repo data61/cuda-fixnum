@@ -37,8 +37,7 @@ public:
     int length() const;
 
     size_t retrieve_into(uint8_t *dest, size_t dest_space, int idx) const;
-    void retrieve(uint8_t **dest, size_t *dest_len, int idx) const;
-    void retrieve_all(uint8_t **dest, size_t *dest_len, size_t *nelts) const;
+    void retrieve_all(uint8_t *dest, size_t dest_space, size_t *dest_len, int *nelts) const;
 
     // Use:
     // fixnum_array::map(ec_add<fixnum_impl>(a, b), res, arr1, arr2);
