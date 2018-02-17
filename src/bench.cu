@@ -1,53 +1,117 @@
-// -*- compile-command: "nvcc -ccbin gcc-5 -std=c++11 -Xcompiler -Wall,-Wextra -g -G -lineinfo -gencode arch=compute_50,code=sm_50 -o bench bench.cu -lstdc++" -*-
+// -*- compile-command: "nvcc -Wno-deprecated-declarations -std=c++11 -Xcompiler -Wall,-Wextra -g -G -gencode arch=compute_50,code=sm_50 -o bench bench.cu" -*-
 
 #include <iostream>
+#include <iomanip>
+#include <sstream>
+#include <string>
 #include <cstring>
 #include <cassert>
 
+#include "fixnum.cu"
 #include "fixnum_array.h"
 
 using namespace std;
 
-// FIXME: Ignore this idea of feeding in new operations for now; just
-// use a fixed set of operations determined by hand_impl
-//
-// FIXME: Passing this to map as an object probably makes inlining
-// impossible in most circumstances.
-template< typename T, typename subwarp_data >
-struct device_op {
-    int _x;
+template< typename fixnum_impl >
+struct set_const /*: public Managed*/ {
+    // FIXME: The repetition of this is dumb and annoying
+    typedef typename fixnum_impl::fixnum fixnum;
 
-    device_op(int x) : _x(x) { }
+    uint8_t *bytes;
+    int nbytes;
 
-    // A fixnum is represented by a register across a subwarp. This
-    // thread is responsible for the Lth registers of the arguments,
-    // where L is the lane index.
-    //
-    // This function should be available from the hand_impl; this sort
-    // of function should be implemented in terms of the hand_impl
-    // functions.
-    __device__ void
-    operator()(T &s, T &cy, T a, T b) {
-        s = a + b;
-        cy = s < a;
+    // FIXME: Assumes endianness of host and device are the same (LE).
+    template< typename T >
+    set_const(T init)
+    : set_const(&init, sizeof(T)) { }
+
+    set_const(const void *bytes_, int nbytes_) : nbytes(nbytes_) {
+        cuda_malloc(&bytes, nbytes);
+        cuda_memcpy_to_device(bytes, bytes_, nbytes);
+    }
+
+    ~set_const() {
+        // FIXME: Why does this break?
+        //cuda_free(bytes);
+    }
+
+    __device__ void operator()(fixnum &s) {
+        fixnum_impl::from_bytes(s, bytes, nbytes);
     }
 };
 
+// TODO: Consider having functions inherit from fixnum_impl; this
+// would be like making the function a host and fixnum_impl the policy
+// in a policy-based design
+// (https://en.wikipedia.org/wiki/Policy-based_design).
+template< typename fixnum_impl >
+struct ec_add /*: public Managed*/ {
+    typedef typename fixnum_impl::fixnum fixnum;
 
-template< typename H >
+    set_const<fixnum_impl> set_k;
+
+    ec_add(/* ec params */ long k = 17) : set_k(k) { }
+
+    __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
+        fixnum k;
+        set_k(k);
+        fixnum_impl::mul_lo(r, a, k);
+        fixnum_impl::mul_lo(r, r, b);
+        fixnum_impl::mul_lo(r, r, r);
+        fixnum_impl::mul_lo(r, r, r);
+    }
+};
+
+template< typename fixnum_impl >
+struct increments /*: public Managed*/ {
+    typedef typename fixnum_impl::fixnum fixnum;
+    long k;
+    increments(long k_ = 17) : k(k_) { }
+
+    __device__ void operator()(fixnum &r, fixnum a) {
+        int cy;
+        r = a;
+        for (long i = 0; i < k; ++i)
+            fixnum_impl::incr_cy(r, cy);
+    }
+};
+
+static string fixnum_as_str(const uint8_t *fn, int nbytes) {
+    ostringstream ss;
+
+    for (int i = nbytes - 1; i >= 0; --i) {
+        // These IO manipulators are forgotten after each use;
+        // i.e. they don't apply to the next output operation (whether
+        // it be in the next loop iteration or in the conditional
+        // below.
+        ss << setfill('0') << setw(2) << hex;
+        ss << (int)fn[i] << flush;
+        if (i && !(i & 3))
+            ss << ' ';
+    }
+    return ss.str();
+}
+
+template< typename fixnum_impl >
 ostream &
-operator<<(ostream &os, const fixnum_array<H> *arr) {
-    constexpr int nbytes = H::FIXNUM_BYTES;
-    uint8_t num[nbytes];
-    int nelts = arr->length();
+operator<<(ostream &os, const fixnum_array<fixnum_impl> *fn_arr) {
+    constexpr int fn_bytes = fixnum_impl::FIXNUM_BYTES;
+    constexpr size_t bufsz = 4096;
+    size_t nbytes;
+    uint8_t arr[bufsz];
+    int nelts;
+
+    fn_arr->retrieve_all(arr, bufsz, &nbytes, &nelts);
+    if (nelts < 0) {
+        os << "( insufficient space to retrieve array )" << endl;
+        return os;
+    }
 
     os << "( ";
     if (nelts > 0) {
-        (void) arr->retrieve_into(num, nbytes, 0);
-        os << (int)num[0];
+        os << fixnum_as_str(arr, fn_bytes);
         for (int i = 1; i < nelts; ++i) {
-            (void) arr->retrieve_into(num, nbytes, i);
-            os << ", " << (int)num[0];
+            os << ", " << fixnum_as_str(arr + i*fn_bytes, fn_bytes);
         }
     }
     os << " )" << flush;
@@ -60,48 +124,36 @@ int main(int argc, char *argv[]) {
     if (argc > 1)
         n = atol(argv[1]);
 
-    // hand_impl determines how operations map to a warp
-    //
-    // bits_per_fixnum should somehow capture the fact that a warp can
-    // be divided into subwarps
-    //
     // n is the number of fixnums in the array; eventually only allow
     // initialisation via a byte array or whatever
-    typedef full_hand<uint32_t, 8> hand_impl;
-    typedef fixnum_array< hand_impl > fixnum_array;
-    auto arr1 = fixnum_array::create(n, 5);
-    auto arr2 = fixnum_array::create(n, 7);
+    typedef my_fixnum_impl<16> fixnum_impl;
+    typedef fixnum_array<fixnum_impl> fixnum_array;
 
-    cout << "slot width: " << hand_impl::SLOT_WIDTH << endl;
-    cout << "nslots:     " << hand_impl::NSLOTS << endl;
+    auto res = fixnum_array::create(n);
+    auto arr1 = fixnum_array::create(n, ~0UL);
+    auto arr2 = fixnum_array::create(n, 245);
 
-    cout << "bytes of things: " << endl;
-    cout << "digit:  " << hand_impl::DIGIT_BYTES << endl;
-    cout << "fixnum: " << hand_impl::FIXNUM_BYTES << endl;
-    cout << "hand:   " << hand_impl::HAND_BYTES << endl;
+    cout << "res  = " << res << endl;
+    cout << "arr1 = " << arr1 << endl;
+    cout << "arr2 = " << arr2 << endl;
 
     // device_op should be able to start operating on the appropriate
     // memory straight away
     //device_op fn(7);
 
     // FIXME: How do I return cy without allocating a gigantic array
-    // where each element is only 0 or 1?  Could return the carries in
-    // the device_op fn?
-    //fixnum_array::map(fn, res, arr1, arr2);
+    // where each element is only 0 or 1? Need fixnum_array to have
+    // C-array semantics, hence allowing other C arrays to be used
+    // alongside, so pass an int* to collect the carries.
 
+    //fixnum_array::map(ec_add<fixnum_impl>(), res, arr1, arr2);
+    fixnum_array::map(increments<fixnum_impl>(1), res, arr1);
+
+    cout << "res  = " << res << endl;
     cout << "arr1 = " << arr1 << endl;
     cout << "arr2 = " << arr2 << endl;
 
-    arr1->add_cy(arr2);
-
-    cout << "arr1 = " << arr1 << endl;
-    cout << "arr2 = " << arr2 << endl;
-
-    arr1->mullo(arr2);
-
-    cout << "arr1 = " << arr1 << endl;
-    cout << "arr2 = " << arr2 << endl;
-
+    delete res;
     delete arr1;
     delete arr2;
 

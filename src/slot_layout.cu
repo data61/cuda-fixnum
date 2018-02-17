@@ -14,14 +14,9 @@ static constexpr int WARPSIZE = 32;
  * 32 threads executed in lock-step by the GPU (thus obviating the
  * need for explicit synchronisation). For any w > 1 that divides 32,
  * a warp can be partitioned into 32/w subwarps of w threads.  The
- * functions below take a parameter "width" which specifies the
- * subwarp size, and which thereby specifies the size of the numbers
- * on which they operate.
- *
- * More specifically, for a width w, the numbers are w digit_t's long,
- * with the ith digit_t in lane i of the subwarp.  So a subwarp of
- * size w is operating on numbers at most 2^(64 * w), since digit_t's
- * are 64 bits.
+ * struct below takes a parameter "width" which specifies the subwarp
+ * size, and which thereby specifies the size of the numbers on which
+ * its functions operate.
  *
  * The term "warp" should be reserved for subwarps of width 32
  * (=warpSize).
@@ -31,18 +26,22 @@ static constexpr int WARPSIZE = 32;
  * selecting relevant lanes in the warp on which to act (see CUDA
  * Programming Guide, B.15). Create an interface that encapsulates
  * both.
+ *
+ * TODO: Work out if using __forceinline__ in these definitions could
+ * actually achieve anything.
  */
 
 template<int width = WARPSIZE>
-struct subwarp
+struct slot_layout
 {
     static_assert(width > 0 && !(WARPSIZE & (width - 1)),
-        "subwarp width must be a positive divisor of warpSize (=32)");
+        "slot width must be a positive divisor of warpSize (=32)");
 
+    static constexpr int SLOT_WIDTH = width;
     /*
-     * Return the lane index within the subwarp.
+     * Return the lane index within the slot.
      *
-     * The lane index is the thread index modulo the width of the subwarp.
+     * The lane index is the thread index modulo the width of the slot.
      */
     static __device__ __forceinline__
     int
@@ -57,9 +56,9 @@ struct subwarp
     }
 
     /*
-     * Index of the top lane of the current subwarp.
+     * Index of the top lane of the current slot.
      *
-     * The top lane of a subwarp is the one with index width - 1.
+     * The top lane of a slot is the one with index width - 1.
      */
     static constexpr int toplaneIdx = width - 1;
 
@@ -71,16 +70,16 @@ struct subwarp
     static constexpr uint32_t mask = (1UL << width) - 1UL;
 
     /*
-     * Return the thread index within the warp where the subwarp
+     * Return the thread index within the warp where the slot
      * containing this lane begins.  Examples:
      *
-     * - width 16: subwarp offset is 0 for threads 0-15, and 16 for
+     * - width 16: slot offset is 0 for threads 0-15, and 16 for
      *    threads 16-31
      *
-     * - width 8: subwarp offset is 0 for threads 0-7, 8 for threads 8-15,
+     * - width 8: slot offset is 0 for threads 0-7, 8 for threads 8-15,
      *    16 for threads 16-23, and 24 for threads 24-31.
      *
-     * The subwarp offset at thread T in a subwarp of width w is given by
+     * The slot offset at thread T in a slot of width w is given by
      * floor(T/w)*w.
      *
      * Useful in conjunction with mask() and __ballot().
@@ -93,7 +92,7 @@ struct subwarp
 
         // Recall: x mod y = x - y*floor(x/y), so
         //
-        //   subwarpOffset = width * floor(threadIdx/width)
+        //   slotOffset = width * floor(threadIdx/width)
         //                 = threadIdx - (threadIdx % width)
         //                 = threadIdx - (threadIdx & (width - 1))
         //                 // TODO: Do use this last formulation!
@@ -106,9 +105,9 @@ struct subwarp
 #if 0
     // TODO: Check if it is worth putting this in a specialisation of
     // width = warpSize. Note that, in the implementation below,
-    // subwarpMask() will be a compile-time constant of 0xfff... so
+    // slotMask() will be a compile-time constant of 0xfff... so
     // the '&' instruction will be removed; however it's not clear
-    // that the compiler will work out that subwarpOffset()
+    // that the compiler will work out that slotOffset()
     // is always 0 when width = warpSize.
     /*
      * Wrapper for notation consistency.
@@ -121,7 +120,7 @@ struct subwarp
 #endif
 
     /*
-     * Like ballot(tst) but restrict the result to the containing subwarp
+     * Like ballot(tst) but restrict the result to the containing slot
      * of size width.
      */
     static __device__ __forceinline__
@@ -245,5 +244,5 @@ struct subwarp
     }
 
 private:
-    subwarp();
+    slot_layout();
 };
