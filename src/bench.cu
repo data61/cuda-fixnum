@@ -69,10 +69,9 @@ struct increments /*: public Managed*/ {
     increments(long k_ = 17) : k(k_) { }
 
     __device__ void operator()(fixnum &r, fixnum a) {
-        int cy;
         r = a;
         for (long i = 0; i < k; ++i)
-            fixnum_impl::incr_cy(r, cy);
+            fixnum_impl::incr_cy(r);
     }
 };
 
