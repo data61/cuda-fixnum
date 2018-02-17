@@ -54,39 +54,4 @@ public:
         // FIXME: Work out how to return the return value properly
         (void) fn.call(args[off]...);
     }
-
-
-    struct sub_br {
-    private:
-        __device__ int resolve_borrows(digit &r, int cy) const {
-            // FIXME: This is at best a half-baked attempt to adapt
-            // the carry propagation code above to the case of
-            // subtraction.
-            // FIXME: Use std::numeric_limits<digit>::min
-            constexpr digit DIGIT_MIN = 0;
-            int L = subwarp::laneIdx();
-            uint32_t allcarries, p, g;
-            int cy_hi;
-
-            g = ~subwarp::ballot(cy);                  // carry generate
-            p = ~subwarp::ballot(r == DIGIT_MIN);      // carry propagate
-            allcarries = (p & g) - g;                 // propagate all carries
-            // FIXME: This is not correct when WIDTH != warpSize
-            cy_hi = allcarries > g;                   // detect final underflow
-            allcarries = (allcarries ^ p) | (g >> 1); // get effective carries
-            r -= (allcarries >> L) & 1;
-
-            // return highest carry
-            return cy_hi;
-        }
-
-    public:
-        __device__ int call(digit &r, digit a, digit b) const {
-            int br;
-
-            r = a - b;
-            br = r > a;
-            return resolve_borrows(r, br);
-        }
-    };
 };

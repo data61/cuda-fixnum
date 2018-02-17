@@ -82,9 +82,22 @@ public:
         cy_out = resolve_carries(r, cy_in);
     }
 
+    __device__ static int sub_br(fixnum &r, int &br_out, fixnum a, fixnum b) {
+        int br_in;
+
+        r = a - b;
+        br_in = r > a;
+        br_out = resolve_borrows(r, br_in);
+    }
+
     __device__ static void incr_cy(fixnum &r, int &cy_out) {
         fixnum one = (slot_layout::laneIdx() == 0);
         add_cy(r, cy_out, r, one);
+    }
+
+    __device__ static void decr_br(fixnum &r, int &br_out) {
+        fixnum one = (slot_layout::laneIdx() == 0);
+        sub_br(r, br_out, r, one);
     }
 
     /*
@@ -132,6 +145,28 @@ private:
         cy_hi = allcarries < g;                   // detect final overflow
         allcarries = (allcarries ^ p) | (g << 1); // get effective carries
         r += (allcarries >> L) & 1;
+
+        // return highest carry
+        return cy_hi;
+    }
+
+    __device__ static int resolve_borrows(fixnum &r, int cy) {
+        // FIXME: This is at best a half-baked attempt to adapt
+        // the carry propagation code above to the case of
+        // subtraction.
+        // FIXME: Use std::numeric_limits<fixnum>::min
+        static constexpr fixnum FIXNUM_MIN = 0;
+        int L = slot_layout::laneIdx();
+        uint32_t allcarries, p, g;
+        int cy_hi;
+
+        g = ~slot_layout::ballot(cy);             // carry generate
+        p = ~slot_layout::ballot(r == FIXNUM_MIN);// carry propagate
+        allcarries = (p & g) - g;                 // propagate all carries
+        // FIXME: This is not correct when WIDTH != warpSize
+        cy_hi = allcarries > g;                   // detect final underflow
+        allcarries = (allcarries ^ p) | (g >> 1); // get effective carries
+        r -= (allcarries >> L) & 1;
 
         // return highest carry
         return cy_hi;
