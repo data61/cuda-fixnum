@@ -66,6 +66,7 @@ template< typename fixnum_impl >
 struct increments /*: public Managed*/ {
     typedef typename fixnum_impl::fixnum fixnum;
     long k;
+
     increments(long k_ = 17) : k(k_) { }
 
     __device__ void operator()(fixnum &r, fixnum a) {

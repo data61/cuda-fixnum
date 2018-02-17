@@ -199,33 +199,6 @@ public:
         return nonzero(r) ? (br ? -1 : 1) : 0;
     }
 
-    /*
-     * q = a / b, assuming b divides a. bi must be 1/B (mod 2^(NBITS/2))
-     * where NBITS := SLOT_WIDTH*FIXNUM_BITS.  bi is nevertheless treated as an
-     * NBITS intmod, so its hi half must be all zeros.
-     *
-     * Source: MCA Algorithm 1.10.
-     */
-    static __device__ void divexact(fixnum &q, fixnum a, fixnum b, fixnum bi) {
-        fixnum t, w = 0;
-
-        // NBITS := SLOT_WIDTH*FIXNUM_BITS
-        // w <- a bi  (mod 2^(NBITS / 2))
-        // FIXME: Original has half width:
-        //digit_mullo(w, a, bi, width / 2);
-        mul_lo(w, a, bi);
-        // t <- b w    (mod 2^NBITS)
-        mul_lo(t, b, w);
-        // t <- a - b w (mod 2^NBITS)
-        sub_br(t, a, t);
-        // t <- bi (a - b w) (mod 2^NBITS)
-        mul_lo(t, bi, t);
-        // w <- w + bi (a - b w)
-        add_cy(w, w, t);
-
-        q = w;
-    }
-
 private:
     __device__ static int resolve_carries(fixnum &r, int cy) {
         // FIXME: Use std::numeric_limits<fixnum>::max
