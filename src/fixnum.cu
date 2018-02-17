@@ -79,7 +79,25 @@ public:
     }
 
     __device__ static void mul_lo(fixnum &r, fixnum a, fixnum b) {
-        r = a * b;
+        // TODO: This should be smaller, probably uint16_t (smallest
+        // possible for addition).  Strangely, the naive translation to
+        // the smaller size broke; to investigate.
+        fixnum cy = 0;
+
+        r = 0;
+        for (int i = slot_layout::SLOT_WIDTH - 1; i >= 0; --i) {
+            fixnum aa = slot_layout::shfl(a, i);
+
+            // TODO: See if using umad.wide improves this.
+            umad_hi_cc(r, cy, aa, b, r);
+            // TODO: Could use rotate here, which is slightly
+            // cheaper than shfl_up0...
+            r = slot_layout::shfl_up0(r, 1);
+            cy = slot_layout::shfl_up0(cy, 1);
+            umad_lo_cc(r, cy, aa, b, r);
+        }
+        cy = slot_layout::shfl_up0(cy, 1);
+        add_cy(r, r, cy);
     }
 };
 
