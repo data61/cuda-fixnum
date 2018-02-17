@@ -6,7 +6,7 @@ template< int FIXNUM_BYTES_, typename register_tp = uint32_t >
 class my_fixnum_impl {
     // TODO: static_assert's restricting FIXNUM_BYTES
     // FIXME: What if FIXNUM_BYTES < sizeof(register_tp)?
-    
+
     typedef slot_layout< FIXNUM_BYTES_ / sizeof(register_tp) > slot_layout;
 
 public:
@@ -73,16 +73,32 @@ public:
         int off = fn_idx * slot_layout::SLOT_WIDTH + slot_layout::laneIdx();
         return ptr[off];
     }
-    
-    __device__ static void add_cy(fixnum &r, /*int &cy,*/ fixnum a, fixnum b) {
-        r = a + b + slot_layout::laneIdx();
+
+    __device__ static void add_cy(fixnum &r, int &cy_out, fixnum a, fixnum b) {
+        int cy_in;
+
+        r = a + b;
+        cy_in = r < a;
+        cy_out = resolve_carries(r, cy_in);
     }
 
+    __device__ static void incr_cy(fixnum &r, int &cy_out) {
+        fixnum one = (slot_layout::laneIdx() == 0);
+        add_cy(r, cy_out, r, one);
+    }
+
+    /*
+     * r = lo_half(a * b)
+     *
+     * The "lo_half" is the product modulo 2^(???), i.e. the same size as
+     * the inputs.
+     */
     __device__ static void mul_lo(fixnum &r, fixnum a, fixnum b) {
         // TODO: This should be smaller, probably uint16_t (smallest
         // possible for addition).  Strangely, the naive translation to
         // the smaller size broke; to investigate.
         fixnum cy = 0;
+        int c;
 
         r = 0;
         for (int i = slot_layout::SLOT_WIDTH - 1; i >= 0; --i) {
@@ -97,7 +113,28 @@ public:
             umad_lo_cc(r, cy, aa, b, r);
         }
         cy = slot_layout::shfl_up0(cy, 1);
-        add_cy(r, r, cy);
+        add_cy(r, c, r, cy);
+        //assert(c == 0);
+    }
+
+private:
+    __device__ static int resolve_carries(fixnum &r, int cy) {
+        // FIXME: Use std::numeric_limits<fixnum>::max
+        static constexpr fixnum FIXNUM_MAX = ~(fixnum)0;
+        int L = slot_layout::laneIdx();
+        uint32_t allcarries, p, g;
+        int cy_hi;
+
+        g = slot_layout::ballot(cy);              // carry generate
+        p = slot_layout::ballot(r == FIXNUM_MAX); // carry propagate
+        allcarries = (p | g) + g;                 // propagate all carries
+        // FIXME: This is not correct when WIDTH != warpSize
+        cy_hi = allcarries < g;                   // detect final overflow
+        allcarries = (allcarries ^ p) | (g << 1); // get effective carries
+        r += (allcarries >> L) & 1;
+
+        // return highest carry
+        return cy_hi;
     }
 };
 
@@ -135,7 +172,7 @@ public:
         __device__ device_post_hook() {  }
         __host__ host_post_hook() {  }
     };
-    
-  
+
+
 };
 #endif
