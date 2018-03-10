@@ -36,6 +36,21 @@ fixnum_array<fixnum_impl>::create(size_t nelts, T init) {
     return a;
 }
 
+template< typename fixnum_impl >
+fixnum_array<fixnum_impl> *
+fixnum_array<fixnum_impl>::create(const uint8_t *data, size_t len, size_t bytes_per_elt) {
+    fixnum_array *a = new fixnum_array;
+    size_t nelts = len / bytes_per_elt;
+    a->nelts = nelts;
+    if (nelts > 0) {
+        size_t nbytes = nelts * fixnum_impl::STORAGE_BYTES;
+        cuda_malloc(&a->ptr, nbytes);
+        // FIXME: Finish this?!  Need a more intelligent way to handle
+        // copying to (and from) the device.
+    }
+    return a;
+}
+
 
 template< typename fixnum_impl >
 fixnum_array<fixnum_impl>::~fixnum_array() {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "slot_layout.cu"
+#include "translator.cu"
 
 template< int FIXNUM_BYTES_, typename register_tp = uint32_t >
 class my_fixnum_impl {
@@ -16,55 +17,17 @@ public:
     // FIXME: Not obviously the right thing to do:
     static constexpr int THREADS_PER_FIXNUM = slot_layout::SLOT_WIDTH;
 
+    // The implementation of a fixnum instruction set will rely on the
+    // memory layout guarantees provided by the translator, which has
+    // transformed the input byte stream into an array on the device.
+    typedef plain_translate< fixnum > translator;
+
     // FIXME: This probably belongs in map or array or something
     __device__ static int get_fn_idx() {
         int blk_tid_offset = blockDim.x * blockIdx.x;
         int tid_in_blk = threadIdx.x;
         int fn_idx = (blk_tid_offset + tid_in_blk) / slot_layout::SLOT_WIDTH;
         return fn_idx;
-    }
-
-    // Assume bytes represents a number \sum_{i=0}^{nbytes-1} bytes[i] * 256^i
-    // If nbytes > FIXNUM_BYTES, then the last (nbytes - FIXNUM_BYTES) are ignored.
-    // If nbytes = 0, then r is assigned 0.
-    __device__ static void from_bytes(fixnum &r, const uint8_t *bytes, int nbytes) {
-        int L = slot_layout::laneIdx();
-        int nregs = nbytes / sizeof(register_tp);
-        int lastsz = nbytes % sizeof(register_tp);
-        const uint8_t *r_bytes = bytes + L * sizeof(register_tp);
-
-        r = 0;
-
-        // This will cause warp divergence when nbytes is not
-        // divisible by sizeof(register_tp).
-        if (L < nregs) {
-            // Recall [CCPG, Section 4] that the nVidia GPU architecture
-            // is little-endian, so this cast/dereference is safe from
-            // endian issues.
-            // FIXME: Not sure why this static cast fails
-            //register_tp d = *static_cast< const register_tp * >(r_bytes);
-            register_tp d = *(const register_tp *)r_bytes;
-
-            // With more sophisticated fixnum implementations (e.g. with
-            // nail bits) we might have to manipulate d to obtain the
-            // correct value of r.
-            r = d;
-        } else if (lastsz && L == nregs) {
-            // Construct r from the leftover bytes one-by-one.
-            for (int i = 0; i < lastsz; ++i)
-                r |= r_bytes[i] << (8*i); // 8 is "bits in byte"
-        }
-    }
-
-    // Translate a to a byte array represented by \sum_{i=0}^{nbytes-1} bytes[i] * 256^i
-    // Assumes bytes points to (at least) FIXNUM_BYTES of space.
-    __device__ static void to_bytes(uint8_t *bytes, fixnum a) {
-        int L = slot_layout::laneIdx();
-        register_tp *out = static_cast< register_tp * >(bytes);
-        // With more sophisticated fixnum implementations (e.g. with
-        // nail bits) we might have to manipulate a to obtain the
-        // correct value of out[L].
-        out[L] = a;
     }
 
     // load the value from ptr corresponding to this thread (lane).
@@ -184,7 +147,7 @@ public:
      * the ith digit of r is nonzero. In particular, result is zero
      * iff r is zero.
      */
-    static __device__ uint32_t nonzero(fixnum r) {
+    __device__ static uint32_t nonzero(fixnum r) {
         return slot_layout::ballot(r != 0);
     }
 
@@ -192,7 +155,7 @@ public:
      * Return -1, 0, or 1, depending on whether x is less than, equal
      * to, or greater than y.
      */
-    static __device__ int cmp(fixnum x, fixnum y) {
+    __device__ static int cmp(fixnum x, fixnum y) {
         fixnum r;
         int br = sub_br(r, x, y);
         // r != 0 iff x != y. If x != y, then br != 0 => x < y.

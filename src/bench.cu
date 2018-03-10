@@ -36,7 +36,7 @@ struct set_const /*: public Managed*/ {
     }
 
     __device__ void operator()(fixnum &s) {
-        fixnum_impl::from_bytes(s, bytes, nbytes);
+        fixnum_impl::translator::from_bytes(s, bytes, nbytes);
     }
 };
 
