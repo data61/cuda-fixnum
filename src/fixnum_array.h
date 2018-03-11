@@ -28,11 +28,8 @@ template< typename fixnum_impl >
 class fixnum_array {
 public:
     static fixnum_array *create(size_t nelts);
-    template< typename T >
-    static fixnum_array *create(size_t nelts, T init);
-    // NB: If bytes_per_elt doesn't divide len, the last len % bytes_per_elt
-    // bytes are *dropped*.
-    static fixnum_array *create(const uint8_t *data, size_t len, size_t bytes_per_elt);
+    // src points to nelts*bytes_per_elt bytes.
+    static fixnum_array *create(const uint8_t *src, size_t nelts, size_t bytes_per_elt);
 
     ~fixnum_array();
 
@@ -47,13 +44,12 @@ public:
     static void map(Func<fixnum_impl> fn, Args... args);
 
 private:
-    // FIXME: this is not the purpose of the fixnum definition, it
-    // will not be a register type in general!
-    typedef typename fixnum_impl::fixnum fixnum;
-    fixnum *ptr;
+    uint8_t *ptr;
     int nelts;
+    int bytes_per_elt;
 
-    fixnum_array() {  }
+    fixnum_array(uint8_t *ptr_, int nelts_, int bytes_per_elt_)
+    : ptr(ptr_), nelts(nelts_), bytes_per_elt(bytes_per_elt_) {  }
 
     fixnum_array(const fixnum_array &);
     fixnum_array &operator=(const fixnum_array &);

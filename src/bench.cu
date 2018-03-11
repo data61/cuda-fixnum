@@ -129,9 +129,13 @@ int main(int argc, char *argv[]) {
     typedef my_fixnum_impl<16> fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
 
+    int *input = new int[n];
+    for (int i = 0; i < n; ++i)
+        input[i] = i;
+    const uint8_t *input_bytes = reinterpret_cast<const uint8_t *>(input);
     auto res = fixnum_array::create(n);
-    auto arr1 = fixnum_array::create(n, ~0UL);
-    auto arr2 = fixnum_array::create(n, 245);
+    auto arr1 = fixnum_array::create(input_bytes, n, sizeof(int));
+    auto arr2 = fixnum_array::create(input_bytes, n, sizeof(int));
 
     cout << "res  = " << res << endl;
     cout << "arr1 = " << arr1 << endl;
@@ -146,8 +150,8 @@ int main(int argc, char *argv[]) {
     // C-array semantics, hence allowing other C arrays to be used
     // alongside, so pass an int* to collect the carries.
 
-    //fixnum_array::map(ec_add<fixnum_impl>(), res, arr1, arr2);
     fixnum_array::map(increments<fixnum_impl>(1), res, arr1);
+    fixnum_array::map(ec_add<fixnum_impl>(), res, res, arr2);
 
     cout << "res  = " << res << endl;
     cout << "arr1 = " << arr1 << endl;
@@ -156,6 +160,7 @@ int main(int argc, char *argv[]) {
     delete res;
     delete arr1;
     delete arr2;
+    delete[] input;
 
     return 0;
 }

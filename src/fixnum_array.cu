@@ -4,58 +4,28 @@
 #include "fixnum_array.h"
 #include "primitives.cu"
 
-template< typename fixnum_impl >
-struct set_const;
+
+static constexpr int CHUNK_BYTES = 1 << 20;
+static constexpr int NCHUNKS = 4;
+static int next_chunk = 0;
+__device__ static uint8_t CHUNKS[NCHUNKS][CHUNK_BYTES];
 
 template< typename fixnum_impl >
 fixnum_array<fixnum_impl> *
 fixnum_array<fixnum_impl>::create(size_t nelts) {
-    fixnum_array *a = new fixnum_array;
-    a->nelts = nelts;
-    if (nelts > 0) {
-        size_t nbytes = nelts * fixnum_impl::STORAGE_BYTES;
-        cuda_malloc(&a->ptr, nbytes);
-    }
-    return a;
-}
-
-template< typename fixnum_impl >
-template< typename T >
-fixnum_array<fixnum_impl> *
-fixnum_array<fixnum_impl>::create(size_t nelts, T init) {
-    fixnum_array *a = new fixnum_array;
-    a->nelts = nelts;
-    if (nelts > 0) {
-        size_t nbytes = nelts * fixnum_impl::STORAGE_BYTES;
-        cuda_malloc(&a->ptr, nbytes);
-        if (init)
-            fixnum_array::map(set_const<fixnum_impl>(init), a);
-        else
-            cuda_memset(a->ptr, 0, nbytes);
-    }
-    return a;
+    return new fixnum_array(nullptr, nelts, 0);
 }
 
 template< typename fixnum_impl >
 fixnum_array<fixnum_impl> *
-fixnum_array<fixnum_impl>::create(const uint8_t *data, size_t len, size_t bytes_per_elt) {
-    fixnum_array *a = new fixnum_array;
-    size_t nelts = len / bytes_per_elt;
-    a->nelts = nelts;
-    if (nelts > 0) {
-        size_t nbytes = nelts * fixnum_impl::STORAGE_BYTES;
-        cuda_malloc(&a->ptr, nbytes);
-        // FIXME: Finish this?!  Need a more intelligent way to handle
-        // copying to (and from) the device.
-    }
-    return a;
+fixnum_array<fixnum_impl>::create(const uint8_t *src, size_t nelts, size_t bytes_per_elt) {
+    return new fixnum_array(src, nelts, bytes_per_elt);
 }
 
 
 template< typename fixnum_impl >
 fixnum_array<fixnum_impl>::~fixnum_array() {
-    if (nelts > 0)
-        cuda_free(ptr);
+    //
 }
 
 template< typename fixnum_impl >
@@ -111,9 +81,20 @@ dispatch(Func<fixnum_impl> fn, int nelts, Args... args) {
 }
 
 template< typename fixnum_impl >
-template< template <typename> class Func, typename... Args >
+static uint8_t *
+copy_to_device(fixnum_array<fixnum_impl> *arg, int nbytes, int offset) {
+    //assert(nbytes <= CHUNK_BYTES);
+    uint8_t *chunk = CHUNKS[next_chunk++];
+    if (arg->ptr != nullptr) {
+        cuda_memcpy_to_device(chunk, arg->ptr + offset, nbytes);
+    }
+    return chunk;
+}
+
+template< typename fixnum_impl >
+template< template <typename> class Func, typename Arg >
 void
-fixnum_array<fixnum_impl>::map(Func<fixnum_impl> fn, Args... args) {
+fixnum_array<fixnum_impl>::map(Func<fixnum_impl> fn, Arg arg) {
     // TODO: Set this to the number of threads on a single SM on the host GPU.
     constexpr int BLOCK_SIZE = 192;
 
@@ -121,7 +102,7 @@ fixnum_array<fixnum_impl>::map(Func<fixnum_impl> fn, Args... args) {
     static_assert(!(BLOCK_SIZE % WARPSIZE),
             "block size must be a multiple of warpSize");
 
-    int nelts = std::min( { args->length()... } );
+    int nelts = args->length();
 
     // FIXME: Check this calculation
     //int fixnums_per_block = (BLOCK_SIZE / warpSize) * fixnum_impl::NSLOTS;
@@ -130,24 +111,25 @@ fixnum_array<fixnum_impl>::map(Func<fixnum_impl> fn, Args... args) {
     // FIXME: nblocks could be too big for a single kernel call to handle
     int nblocks = iceil(nelts, fixnums_per_block);
 
-//    if (t) *t = clock();
-
     // nblocks > 0 iff nelts > 0
     if (nblocks > 0) {
         cudaStream_t stream;
         cuda_check(cudaStreamCreate(&stream), "create stream");
-        // FIXME: how do I attach the function?
-        //stream_attach(stream, fn);
-//         cuda_stream_attach_mem(stream, src->ptr);
-//         cuda_stream_attach_mem(stream, ptr);
-        cuda_check(cudaStreamSynchronize(stream), "stream sync");
 
-        dispatch<<< nblocks, BLOCK_SIZE, 0, stream >>>(fn, nelts, args->ptr...);
+        uint8_t *dargs[] = { copy_to_device(args, , 0)... };
+
+        dispatch<<< nblocks, BLOCK_SIZE, 0, stream >>>(fn, nelts, dargs);
 
         cuda_check(cudaPeekAtLastError(), "kernel invocation/run");
         cuda_check(cudaStreamSynchronize(stream), "stream sync");
         cuda_check(cudaStreamDestroy(stream), "stream destroy");
     }
 
-//    if (t) *t = clock() - *t;
+    int elements_per_call;
+    for (int i = 0; i < nelts; i += elements_per_call) {
+        // get next stream
+        // copy arg to chunk
+        // call kernel
+        // retrieve result from chunk
+    }
 }
