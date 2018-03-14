@@ -20,6 +20,9 @@ struct plain_translate {
     //
     // Call with slot_layout::laneIdx() for idx.
     __device__ static void from_bytes(fixnum &r, const uint8_t *bytes, int nbytes, int idx) {
+        // FIXME: Remove this restriction on alignment of bytes.
+        assert((bytes & 0x7) == 0);
+
         int nregs = nbytes / sizeof(register_tp);
         int lastsz = nbytes % sizeof(register_tp);
         const uint8_t *r_bytes = bytes + idx * sizeof(register_tp);
@@ -52,6 +55,9 @@ struct plain_translate {
     // Translate a to a byte array represented by \sum_{i=0}^{nbytes-1} bytes[i] * 256^i
     // Assumes bytes points to (at least) FIXNUM_BYTES of space.
     __device__ static void to_bytes(uint8_t *bytes, fixnum a, int idx) {
+        // FIXME: Remove this restriction on alignment of bytes.
+        assert((bytes & 0x7) == 0);
+
         register_tp *out = reinterpret_cast< register_tp * >(bytes);
         // With more sophisticated fixnum implementations (e.g. with
         // nail bits) we might have to manipulate a to obtain the
