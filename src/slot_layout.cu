@@ -88,7 +88,7 @@ struct slot_layout
     int
     offset() {
         // Thread index within the (full) warp.
-        int T = threadIdx.x & (warpSize - 1);
+        int T = threadIdx.x & (WARPSIZE - 1);
 
         // Recall: x mod y = x - y*floor(x/y), so
         //
