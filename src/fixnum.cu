@@ -3,37 +3,33 @@
 #include "slot_layout.cu"
 #include "translator.cu"
 
-template< int FIXNUM_BYTES_, typename register_tp = uint32_t >
+
+template< int FIXNUM_BYTES, typename register_tp = uint32_t >
 class my_fixnum_impl {
     // TODO: static_assert's restricting FIXNUM_BYTES
     // FIXME: What if FIXNUM_BYTES < sizeof(register_tp)?
 
-    typedef slot_layout< FIXNUM_BYTES_ / sizeof(register_tp) > slot_layout;
+    typedef slot_layout< FIXNUM_BYTES / sizeof(register_tp) > slot_layout;
 
 public:
     typedef register_tp fixnum;
-    static constexpr int FIXNUM_BYTES = FIXNUM_BYTES_;
-    static constexpr int STORAGE_BYTES = FIXNUM_BYTES;
-    // FIXME: Not obviously the right thing to do:
-    static constexpr int THREADS_PER_FIXNUM = slot_layout::SLOT_WIDTH;
+
+    // Get the slot index for the current thread.
+    __device__ static int slot_idx() {
+        int blk_tid_offset = blockDim.x * blockIdx.x;
+        int tid_in_blk = threadIdx.x;
+        return (blk_tid_offset + tid_in_blk) / slot_layout::SLOT_WIDTH;
+    }
 
     // The implementation of a fixnum instruction set will rely on the
     // memory layout guarantees provided by the translator, which has
     // transformed the input byte stream into an array on the device.
     typedef plain_translate< fixnum > translator;
 
-    // FIXME: This probably belongs in map or array or something
-    __device__ static int get_fn_idx() {
-        int blk_tid_offset = blockDim.x * blockIdx.x;
-        int tid_in_blk = threadIdx.x;
-        int fn_idx = (blk_tid_offset + tid_in_blk) / slot_layout::SLOT_WIDTH;
-        return fn_idx;
-    }
-
-    // load the value from ptr corresponding to this thread (lane).
-    template< typename T >
-    __device__ static T &load(T *ptr, int fn_idx) {
-        int off = fn_idx * slot_layout::SLOT_WIDTH + slot_layout::laneIdx();
+    // get/set the value from ptr corresponding to this thread (lane) in
+    // slot number idx.
+    __device__ static fixnum &get(fixnum *ptr, int idx) {
+        int off = idx * slot_layout::SLOT_WIDTH + slot_layout::laneIdx();
         return ptr[off];
     }
 

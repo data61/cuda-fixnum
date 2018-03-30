@@ -105,9 +105,9 @@ fixnum_array<fixnum_impl>::retrieve_all(uint8_t *dest, size_t dest_space, size_t
 template< template <typename> class Func, typename fixnum_impl, typename... Args >
 __global__ void
 dispatch(Func<fixnum_impl> fn, int nelts, Args... args) {
-    int fn_idx = fixnum_impl::get_fn_idx();
-    if (fn_idx < nelts)
-        fn(fixnum_impl::load(args, fn_idx)...);
+    int idx = fixnum_impl::slot_idx();
+    if (idx < nelts)
+        fn(fixnum_impl::get(args, idx)...);
 }
 
 template< typename fixnum_impl >
@@ -130,8 +130,6 @@ fixnum_array<fixnum_impl>::map(Func<fixnum_impl> fn, Args... args) {
     // FIXME: nblocks could be too big for a single kernel call to handle
     int nblocks = iceil(nelts, fixnums_per_block);
 
-//    if (t) *t = clock();
-
     // nblocks > 0 iff nelts > 0
     if (nblocks > 0) {
         cudaStream_t stream;
@@ -148,6 +146,4 @@ fixnum_array<fixnum_impl>::map(Func<fixnum_impl> fn, Args... args) {
         cuda_check(cudaStreamSynchronize(stream), "stream sync");
         cuda_check(cudaStreamDestroy(stream), "stream destroy");
     }
-
-//    if (t) *t = clock() - *t;
 }
