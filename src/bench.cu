@@ -12,6 +12,47 @@
 
 using namespace std;
 
+static string fixnum_as_str(const uint8_t *fn, int nbytes) {
+    ostringstream ss;
+
+    for (int i = nbytes - 1; i >= 0; --i) {
+        // These IO manipulators are forgotten after each use;
+        // i.e. they don't apply to the next output operation (whether
+        // it be in the next loop iteration or in the conditional
+        // below.
+        ss << setfill('0') << setw(2) << hex;
+        ss << (int)fn[i] << flush;
+        if (i && !(i & 3))
+            ss << ' ';
+    }
+    return ss.str();
+}
+
+template< typename fixnum_impl >
+ostream &operator<<(ostream &os, const fixnum_array<fixnum_impl> *fn_arr) {
+    constexpr int fn_bytes = fixnum_impl::FIXNUM_BYTES;
+    constexpr size_t bufsz = 4096;
+    size_t nbytes;
+    uint8_t arr[bufsz];
+    int nelts;
+
+    fn_arr->retrieve_all(arr, bufsz, &nbytes, &nelts);
+    if (nelts < 0) {
+        os << "( insufficient space to retrieve array )" << endl;
+        return os;
+    }
+
+    os << "( ";
+    if (nelts > 0) {
+        os << fixnum_as_str(arr, fn_bytes);
+        for (int i = 1; i < nelts; ++i) {
+            os << ", " << fixnum_as_str(arr + i*fn_bytes, fn_bytes);
+        }
+    }
+    os << " )" << flush;
+    return os;
+}
+
 template< typename fixnum_impl >
 struct set_const /*: public Managed*/ {
     // FIXME: The repetition of this is dumb and annoying
@@ -75,49 +116,6 @@ struct increments /*: public Managed*/ {
             fixnum_impl::incr_cy(r);
     }
 };
-
-static string fixnum_as_str(const uint8_t *fn, int nbytes) {
-    ostringstream ss;
-
-    for (int i = nbytes - 1; i >= 0; --i) {
-        // These IO manipulators are forgotten after each use;
-        // i.e. they don't apply to the next output operation (whether
-        // it be in the next loop iteration or in the conditional
-        // below.
-        ss << setfill('0') << setw(2) << hex;
-        ss << (int)fn[i] << flush;
-        if (i && !(i & 3))
-            ss << ' ';
-    }
-    return ss.str();
-}
-
-template< typename fixnum_impl >
-ostream &
-operator<<(ostream &os, const fixnum_array<fixnum_impl> *fn_arr) {
-    constexpr int fn_bytes = fixnum_impl::FIXNUM_BYTES;
-    constexpr size_t bufsz = 4096;
-    size_t nbytes;
-    uint8_t arr[bufsz];
-    int nelts;
-
-    fn_arr->retrieve_all(arr, bufsz, &nbytes, &nelts);
-    if (nelts < 0) {
-        os << "( insufficient space to retrieve array )" << endl;
-        return os;
-    }
-
-    os << "( ";
-    if (nelts > 0) {
-        os << fixnum_as_str(arr, fn_bytes);
-        for (int i = 1; i < nelts; ++i) {
-            os << ", " << fixnum_as_str(arr + i*fn_bytes, fn_bytes);
-        }
-    }
-    os << " )" << flush;
-    return os;
-}
-
 
 int main(int argc, char *argv[]) {
     long n = 16;
