@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 /**
  * Translate to and from arrays of bytes.
  *
@@ -14,6 +16,13 @@
  */
 template< typename register_tp >
 struct plain_translate {
+    // The implementation of a fixnum instruction set will rely on the
+    // memory layout guarantees provided by the translator, which has
+    // transformed the input byte stream into an array on the device.
+
+    
+    static constexpr int STORAGE_BYTES = FIXNUM_BYTES;
+    
     // Assume bytes represents a number \sum_{i=0}^{nbytes-1} bytes[i] * 256^i
     // If nbytes > FIXNUM_BYTES, then the last (nbytes - FIXNUM_BYTES) are ignored.
     // If nbytes = 0, then r is assigned 0.
@@ -21,7 +30,7 @@ struct plain_translate {
     // Call with slot_layout::laneIdx() for idx.
     __device__ static void from_bytes(fixnum &r, const uint8_t *bytes, int nbytes, int idx) {
         // FIXME: Remove this restriction on alignment of bytes.
-        assert((bytes & 0x7) == 0);
+        assert(((uintptr_t)bytes & 0x7) == 0);
 
         int nregs = nbytes / sizeof(register_tp);
         int lastsz = nbytes % sizeof(register_tp);
@@ -56,7 +65,7 @@ struct plain_translate {
     // Assumes bytes points to (at least) FIXNUM_BYTES of space.
     __device__ static void to_bytes(uint8_t *bytes, fixnum a, int idx) {
         // FIXME: Remove this restriction on alignment of bytes.
-        assert((bytes & 0x7) == 0);
+        assert(((uintptr_t)bytes & 0x7) == 0);
 
         register_tp *out = reinterpret_cast< register_tp * >(bytes);
         // With more sophisticated fixnum implementations (e.g. with

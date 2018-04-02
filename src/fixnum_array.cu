@@ -4,49 +4,51 @@
 #include "fixnum_array.h"
 #include "primitives.cu"
 
-template< typename fixnum_impl >
-struct set_const;
+// Notes: Read programming guide Section K.3
+// - Can prefetch unified memory
+// - Can advise on location of unified memory
 
+// TODO: Can I use smart pointers? unique_ptr?
+
+// TODO: Refactor these three constructors
 template< typename fixnum_impl >
 fixnum_array<fixnum_impl> *
 fixnum_array<fixnum_impl>::create(size_t nelts) {
     fixnum_array *a = new fixnum_array;
     a->nelts = nelts;
     if (nelts > 0) {
-        size_t nbytes = nelts * fixnum_impl::STORAGE_BYTES;
-        cuda_malloc(&a->ptr, nbytes);
+        size_t nwords = nelts * FIXNUM_STORAGE_WORDS;
+        cuda_malloc_managed(&a->ptr, nwords * sizeof(word_tp));
     }
     return a;
 }
+
+template< typename fixnum_impl >
+struct set_const;
 
 template< typename fixnum_impl >
 template< typename T >
 fixnum_array<fixnum_impl> *
 fixnum_array<fixnum_impl>::create(size_t nelts, T init) {
-    fixnum_array *a = new fixnum_array;
-    a->nelts = nelts;
-    if (nelts > 0) {
-        size_t nbytes = nelts * fixnum_impl::STORAGE_BYTES;
-        cuda_malloc(&a->ptr, nbytes);
-        if (init)
-            fixnum_array::map(set_const<fixnum_impl>(init), a);
-        else
-            cuda_memset(a->ptr, 0, nbytes);
-    }
+    fixnum_array *a = create(nelts);
+    auto fn = set_const<fixnum_impl>::create(init);
+    map(fn, a);
+    delete fn;
     return a;
 }
 
 template< typename fixnum_impl >
 fixnum_array<fixnum_impl> *
-fixnum_array<fixnum_impl>::create(const uint8_t *data, size_t len, size_t bytes_per_elt) {
-    fixnum_array *a = new fixnum_array;
-    size_t nelts = len / bytes_per_elt;
-    a->nelts = nelts;
-    if (nelts > 0) {
-        size_t nbytes = nelts * fixnum_impl::STORAGE_BYTES;
-        cuda_malloc(&a->ptr, nbytes);
-        // FIXME: Finish this?!  Need a more intelligent way to handle
-        // copying to (and from) the device.
+fixnum_array<fixnum_impl>::create(const uint8_t *data, size_t total_bytes, size_t bytes_per_elt) {
+    size_t nelts = total_bytes / bytes_per_elt;
+    fixnum_array *a = create(nelts);
+
+    word_tp *p = a->ptr;
+    const uint8_t *d = data;
+    for (size_t i = 0; i < nelts; ++i) {
+        fixnum_impl::from_bytes(p, d, bytes_per_elt);
+        p += FIXNUM_STORAGE_WORDS;
+        d += bytes_per_elt;
     }
     return a;
 }
@@ -67,53 +69,43 @@ fixnum_array<fixnum_impl>::length() const {
 template< typename fixnum_impl >
 size_t
 fixnum_array<fixnum_impl>::retrieve_into(uint8_t *dest, size_t dest_space, int idx) const {
-    constexpr size_t nbytes = fixnum_impl::FIXNUM_BYTES;
-    if (dest_space < nbytes || idx < 0 || idx > nelts) {
-        // FIXME: This is not the right way to handle an
-        // "insufficient space" error or an "index out of bounds"
-        // error.
+    if (idx < 0 || idx > nelts) {
+        // FIXME: This is not the right way to handle an "index out of
+        // bounds" error.
         return 0;
     }
-    // clear all of dest
-    // TODO: Is this necessary? Should it be optional?
-    memset(dest, 0, dest_space);
-    cuda_memcpy_from_device(dest, ptr + idx * fixnum_impl::SLOT_WIDTH, nbytes);
-    return nbytes;
+    fixnum_impl::to_bytes(dest, dest_space, ptr + idx * FIXNUM_STORAGE_WORDS);
+    // FIXME: Return correct value.
+    return dest_space;
 }
 
-// FIXME: Caller should provide the memory
-// FIXME: Should be delegating to fixnum_impl to interpret the raw data
+// FIXME: Can return fewer than nelts elements.
 template< typename fixnum_impl >
 void
-fixnum_array<fixnum_impl>::retrieve_all(uint8_t *dest, size_t dest_space, size_t *dest_len, int *nelts) const {
-    size_t space_needed = this->nelts * fixnum_impl::STORAGE_BYTES;
-
-    *nelts = -1; // FIXME: don't mix error values and return parameters!
-    *dest_len = 0;
-    if (space_needed > dest_space) return;
-
-    *nelts = this->nelts;
-    if ( ! *nelts) return;
-
-    *dest_len = space_needed;
-    // FIXME: This won't correctly zero-pad each element in general
-    memset(dest, 0, *dest_len);
-    cuda_memcpy_from_device(dest, ptr, *dest_len);
+fixnum_array<fixnum_impl>::retrieve_all(uint8_t *dest, size_t dest_space, int *dest_nelts) const {
+    const word_tp *p = ptr;
+    uint8_t *d = dest;
+    int max_dest_nelts = dest_space / fixnum_impl::FIXNUM_BYTES;
+    *dest_nelts = std::min(nelts, max_dest_nelts);
+    for (int i = 0; i < *dest_nelts; ++i) {
+        fixnum_impl::to_bytes(d, fixnum_impl::FIXNUM_BYTES, p);
+        p += FIXNUM_STORAGE_WORDS;
+        d += fixnum_impl::FIXNUM_BYTES;
+    }
 }
-
 
 template< template <typename> class Func, typename fixnum_impl, typename... Args >
 __global__ void
-dispatch(Func<fixnum_impl> fn, int nelts, Args... args) {
+dispatch(Func<fixnum_impl> *fn, int nelts, Args... args) {
     int idx = fixnum_impl::slot_idx();
     if (idx < nelts)
-        fn(fixnum_impl::get(args, idx)...);
+        (*fn)(fixnum_impl::get(args, idx)...);
 }
 
 template< typename fixnum_impl >
 template< template <typename> class Func, typename... Args >
 void
-fixnum_array<fixnum_impl>::map(Func<fixnum_impl> fn, Args... args) {
+fixnum_array<fixnum_impl>::map(Func<fixnum_impl> *fn, Args... args) {
     // TODO: Set this to the number of threads on a single SM on the host GPU.
     constexpr int BLOCK_SIZE = 192;
 
@@ -124,8 +116,7 @@ fixnum_array<fixnum_impl>::map(Func<fixnum_impl> fn, Args... args) {
     int nelts = std::min( { args->length()... } );
 
     // FIXME: Check this calculation
-    //int fixnums_per_block = (BLOCK_SIZE / warpSize) * fixnum_impl::NSLOTS;
-    constexpr int fixnums_per_block = BLOCK_SIZE / fixnum_impl::THREADS_PER_FIXNUM;
+    constexpr int fixnums_per_block = BLOCK_SIZE / fixnum_impl::SLOT_WIDTH;
 
     // FIXME: nblocks could be too big for a single kernel call to handle
     int nblocks = iceil(nelts, fixnums_per_block);
@@ -145,5 +136,8 @@ fixnum_array<fixnum_impl>::map(Func<fixnum_impl> fn, Args... args) {
         cuda_check(cudaPeekAtLastError(), "kernel invocation/run");
         cuda_check(cudaStreamSynchronize(stream), "stream sync");
         cuda_check(cudaStreamDestroy(stream), "stream destroy");
+
+        // FIXME: Only synchronize when retrieving data from array
+        cuda_device_synchronize();
     }
 }

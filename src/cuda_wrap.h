@@ -24,7 +24,11 @@ cuda_print_errmsg(cudaError err, const char *msg, const char *file, const int li
 #define cuda_malloc(ptr, size)                                  \
     cuda_check(cudaMalloc(ptr, size), "memory allocation")
 #define cuda_malloc_managed(ptr, size)                                  \
-    cuda_check(cudaMallocManaged(ptr, size, cudaMemAttachHost), "unified memory allocation")
+    cuda_check(cudaMallocManaged(ptr, size),                            \
+            "unified memory allocation (default attach)")
+#define cuda_malloc_managed_host(ptr, size)                             \
+    cuda_check(cudaMallocManaged(ptr, size, cudaMemAttachHost),         \
+            "unified memory allocation (host attach)")
 #define cuda_stream_attach_mem(stream, ptr)                             \
     cuda_check(cudaStreamAttachMemAsync(stream, ptr), "attach unified memory to stream")
 #define cuda_free(ptr)                                  \
@@ -37,3 +41,5 @@ cuda_print_errmsg(cudaError err, const char *msg, const char *file, const int li
     cuda_check(cudaMemcpy(dest, src, size, cudaMemcpyDeviceToDevice), "copy on device")
 #define cuda_memset(dest, val, size)                        \
     cuda_check(cudaMemset(dest, val, size), "memset on device")
+#define cuda_device_synchronize() \
+    cuda_check(cudaDeviceSynchronize(), "device synchronize")

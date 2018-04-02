@@ -1,5 +1,6 @@
-// -*- compile-command: "nvcc -Wno-deprecated-declarations -std=c++11 -Xcompiler -Wall,-Wextra -g -G -gencode arch=compute_50,code=sm_50 -o bench bench.cu" -*-
+// -*- compile-command: "nvcc -Wno-deprecated-declarations -std=c++11 -lineinfo -Xcompiler -Wall,-Wextra -g -G -gencode arch=compute_50,code=sm_50 -o bench bench.cu" -*-
 
+#include <memory>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -21,6 +22,7 @@ static string fixnum_as_str(const uint8_t *fn, int nbytes) {
         // it be in the next loop iteration or in the conditional
         // below.
         ss << setfill('0') << setw(2) << hex;
+        // TODO: What is 'flush' doing here?
         ss << (int)fn[i] << flush;
         if (i && !(i & 3))
             ss << ' ';
@@ -32,53 +34,63 @@ template< typename fixnum_impl >
 ostream &operator<<(ostream &os, const fixnum_array<fixnum_impl> *fn_arr) {
     constexpr int fn_bytes = fixnum_impl::FIXNUM_BYTES;
     constexpr size_t bufsz = 4096;
-    size_t nbytes;
     uint8_t arr[bufsz];
     int nelts;
 
-    fn_arr->retrieve_all(arr, bufsz, &nbytes, &nelts);
-    if (nelts < 0) {
-        os << "( insufficient space to retrieve array )" << endl;
-        return os;
-    }
-
+    fn_arr->retrieve_all(arr, bufsz, &nelts);
     os << "( ";
-    if (nelts > 0) {
+    if (nelts < fn_arr->length()) {
+        os << "insufficient space to retrieve array";
+    } else if (nelts > 0) {
         os << fixnum_as_str(arr, fn_bytes);
-        for (int i = 1; i < nelts; ++i) {
+        for (int i = 1; i < nelts; ++i)
             os << ", " << fixnum_as_str(arr + i*fn_bytes, fn_bytes);
-        }
     }
     os << " )" << flush;
     return os;
 }
 
+// TODO: Check whether the synchronize calls are necessary here (they
+// are clearly sufficient).
+struct managed {
+    void *operator new(size_t bytes) {
+        void *ptr;
+        cuda_malloc_managed(&ptr, bytes);
+        cuda_device_synchronize();
+        return ptr;
+    }
+
+    void operator delete(void *ptr) {
+        cuda_device_synchronize();
+        cuda_free(ptr);
+    }
+};
+
 template< typename fixnum_impl >
-struct set_const /*: public Managed*/ {
+class set_const : public managed {
+public:
     // FIXME: The repetition of this is dumb and annoying
     typedef typename fixnum_impl::fixnum fixnum;
 
-    uint8_t *bytes;
-    int nbytes;
+    static set_const *create(const uint8_t *konst, int nbytes) {
+        set_const *sc = new set_const;
+        fixnum_impl::from_bytes(sc->konst, konst, nbytes);
+        return sc;
+    }
 
-    // FIXME: Assumes endianness of host and device are the same (LE).
     template< typename T >
-    set_const(T init)
-    : set_const(&init, sizeof(T)) { }
-
-    set_const(const void *bytes_, int nbytes_) : nbytes(nbytes_) {
-        cuda_malloc(&bytes, nbytes);
-        cuda_memcpy_to_device(bytes, bytes_, nbytes);
+    static set_const *create(T init) {
+        auto bytes = reinterpret_cast<const uint8_t *>(&init);
+        return create(bytes, sizeof(T));
     }
-
-    ~set_const() {
-        // FIXME: Why does this break?
-        //cuda_free(bytes);
-    }
-
+    
     __device__ void operator()(fixnum &s) {
-        fixnum_impl::translator::from_bytes(s, bytes, nbytes);
+        int L = fixnum_impl::slot_layout::laneIdx();
+        s = konst[L];
     }
+
+private:
+    typename fixnum_impl::fixnum konst[fixnum_impl::SLOT_WIDTH];
 };
 
 // TODO: Consider having functions inherit from fixnum_impl; this
@@ -86,16 +98,19 @@ struct set_const /*: public Managed*/ {
 // in a policy-based design
 // (https://en.wikipedia.org/wiki/Policy-based_design).
 template< typename fixnum_impl >
-struct ec_add /*: public Managed*/ {
+struct ec_add : public managed {
     typedef typename fixnum_impl::fixnum fixnum;
 
-    set_const<fixnum_impl> set_k;
+    set_const<fixnum_impl> *set_k;
 
-    ec_add(/* ec params */ long k = 17) : set_k(k) { }
+    ec_add(/* ec params */ long k = 17)
+    : set_k(set_const<fixnum_impl>::create(k)) { }
+
+    ~ec_add() { delete set_k; }
 
     __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
         fixnum k;
-        set_k(k);
+        (*set_k)(k);
         fixnum_impl::mul_lo(r, a, k);
         fixnum_impl::mul_lo(r, r, b);
         fixnum_impl::mul_lo(r, r, r);
@@ -104,7 +119,7 @@ struct ec_add /*: public Managed*/ {
 };
 
 template< typename fixnum_impl >
-struct increments /*: public Managed*/ {
+struct increments : public managed {
     typedef typename fixnum_impl::fixnum fixnum;
     long k;
 
@@ -144,8 +159,13 @@ int main(int argc, char *argv[]) {
     // C-array semantics, hence allowing other C arrays to be used
     // alongside, so pass an int* to collect the carries.
 
-    //fixnum_array::map(ec_add<fixnum_impl>(), res, arr1, arr2);
-    fixnum_array::map(increments<fixnum_impl>(1), res, arr1);
+    auto fn1 = new ec_add<fixnum_impl>();
+    fixnum_array::map(fn1, res, arr1, arr2);
+    auto fn2 = new increments<fixnum_impl>(1);
+    fixnum_array::map(fn2, res, arr1);
+
+    delete fn1;
+    delete fn2;
 
     cout << "res  = " << res << endl;
     cout << "arr1 = " << arr1 << endl;

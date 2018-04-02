@@ -1,18 +1,21 @@
 #pragma once
 
 #include "slot_layout.cu"
-#include "translator.cu"
 
+template< typename fixnum_impl >
+class fixnum_array;
 
-template< int FIXNUM_BYTES, typename register_tp = uint32_t >
+template< int FIXNUM_BYTES_, typename word_tp_ = uint32_t >
 class my_fixnum_impl {
-    // TODO: static_assert's restricting FIXNUM_BYTES
+    // TODO: static_assert's restricting FIXNUM_BYTES, and restricting
+    // register_tp to be integral.
     // FIXME: What if FIXNUM_BYTES < sizeof(register_tp)?
-
-    typedef slot_layout< FIXNUM_BYTES / sizeof(register_tp) > slot_layout;
-
 public:
-    typedef register_tp fixnum;
+    typedef word_tp_ word_tp;
+    static constexpr int FIXNUM_BYTES = FIXNUM_BYTES_;
+    static constexpr int SLOT_WIDTH = FIXNUM_BYTES_ / sizeof(word_tp_);
+    typedef slot_layout< SLOT_WIDTH > slot_layout;
+    typedef word_tp fixnum;
 
     // Get the slot index for the current thread.
     __device__ static int slot_idx() {
@@ -21,10 +24,32 @@ public:
         return (blk_tid_offset + tid_in_blk) / slot_layout::SLOT_WIDTH;
     }
 
-    // The implementation of a fixnum instruction set will rely on the
-    // memory layout guarantees provided by the translator, which has
-    // transformed the input byte stream into an array on the device.
-    typedef plain_translate< fixnum > translator;
+    // FIXME: Provide host version AND/OR device version?  Probably
+    // just host version (at least for now), since we don't know
+    // whether the source/destination memory is controlled by the
+    // unified memory subsystem.
+    __host__ static void from_bytes(fixnum *r, const uint8_t *bytes, int nbytes) {
+        uint8_t *s = reinterpret_cast< uint8_t * >(r);
+        // FIXME: Should probably indicate an error if nbytes > FIXNUM_BYTES
+        // Perhaps return the number of bytes actually written?
+        if (nbytes >= FIXNUM_BYTES) {
+            memcpy(s, bytes, FIXNUM_BYTES);
+        } else {
+            memcpy(s, bytes, nbytes);
+            memset(s + nbytes, 0, FIXNUM_BYTES - nbytes);
+        }
+    }
+
+    __host__ static void to_bytes(uint8_t *bytes, int nbytes, const fixnum *r) {
+        // FIXME: Should probably indicate an error if nbytes < FIXNUM_BYTES
+        // Perhaps return the number of bytes actually written?
+        if (nbytes <= FIXNUM_BYTES) {
+            memcpy(bytes, r, FIXNUM_BYTES);
+        } else {
+            memcpy(bytes, r, FIXNUM_BYTES);
+            memset(bytes + FIXNUM_BYTES, 0, nbytes - FIXNUM_BYTES);
+        }
+    }
 
     // get/set the value from ptr corresponding to this thread (lane) in
     // slot number idx.
@@ -98,7 +123,7 @@ public:
         int L = slot_layout::laneIdx();
 
         r = s = 0;
-        for (int i = width - 1; i >= 0; --i) {
+        for (int i = SLOT_WIDTH - 1; i >= 0; --i) {
             fixnum aa = slot_layout::shfl(a, i), t;
 
             // TODO: Review this code: it seems to have more shuffles than
