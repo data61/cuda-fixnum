@@ -17,13 +17,6 @@ public:
     typedef slot_layout< SLOT_WIDTH > slot_layout;
     typedef word_tp fixnum;
 
-    // Get the slot index for the current thread.
-    __device__ static int slot_idx() {
-        int blk_tid_offset = blockDim.x * blockIdx.x;
-        int tid_in_blk = threadIdx.x;
-        return (blk_tid_offset + tid_in_blk) / slot_layout::SLOT_WIDTH;
-    }
-
     // FIXME: Provide host version AND/OR device version?  Probably
     // just host version (at least for now), since we don't know
     // whether the source/destination memory is controlled by the
@@ -49,6 +42,13 @@ public:
             memcpy(bytes, r, FIXNUM_BYTES);
             memset(bytes + FIXNUM_BYTES, 0, nbytes - FIXNUM_BYTES);
         }
+    }
+
+    // Get the slot index for the current thread.
+    __device__ static int slot_idx() {
+        int blk_tid_offset = blockDim.x * blockIdx.x;
+        int tid_in_blk = threadIdx.x;
+        return (blk_tid_offset + tid_in_blk) / slot_layout::SLOT_WIDTH;
     }
 
     // get/set the value from ptr corresponding to this thread (lane) in
