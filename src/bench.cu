@@ -137,8 +137,6 @@ int main(int argc, char *argv[]) {
     if (argc > 1)
         n = atol(argv[1]);
 
-    // n is the number of fixnums in the array; eventually only allow
-    // initialisation via a byte array or whatever
     typedef my_fixnum_impl<16> fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
 
