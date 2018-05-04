@@ -1,15 +1,24 @@
 #pragma once
 
+#include <math.h>
+#include <type_traits>
 #include "slot_layout.cu"
 
-template< typename fixnum_impl >
-class fixnum_array;
-
+/*
+ * This is an archetypal implementation of a fixnum instruction
+ * set. It defines the de facto interface for such implementations.
+ *
+ * All methods are defined for the device. It is someone else's
+ * problem to get the data onto the device.
+ */
 template< int FIXNUM_BYTES_, typename word_tp_ = uint32_t >
 class my_fixnum_impl {
-    // TODO: static_assert's restricting FIXNUM_BYTES, and restricting
-    // register_tp to be integral.
-    // FIXME: What if FIXNUM_BYTES < sizeof(register_tp)?
+    static_assert(FIXNUM_BYTES_ > 0,
+            "Fixnum bytes must be positive.");
+    static_assert(FIXNUM_BYTES_ % sizeof(word_tp_) == 0,
+            "Fixnum word size must divide fixnum bytes.");
+    static_assert(std::is_integral< word_tp_ >::value,
+            "word_tp must be integral.");
 public:
     typedef word_tp_ word_tp;
     static constexpr int FIXNUM_BYTES = FIXNUM_BYTES_;
@@ -17,34 +26,40 @@ public:
     typedef slot_layout< SLOT_WIDTH > slot_layout;
     typedef word_tp fixnum;
 
-    // FIXME: Provide host version AND/OR device version?  Probably
-    // just host version (at least for now), since we don't know
-    // whether the source/destination memory is controlled by the
-    // unified memory subsystem.
-    __host__ static void from_bytes(fixnum *r, const uint8_t *bytes, int nbytes) {
+    /*
+     * Set r using bytes, interpreting bytes as a base-256 unsigned
+     * integer. Return the number of bytes used. If nbytes >
+     * FIXNUM_BYTES, then the last nbytes - FIXNUM_BYTES are ignored.
+     *
+     * NB: Normally we would expect from_bytes to be exclusively a
+     * device function, but it's the same for the host, so we leave it
+     * in.
+     */
+    __host__ __device__ static int from_bytes(fixnum *r, const uint8_t *bytes, int nbytes) {
         uint8_t *s = reinterpret_cast< uint8_t * >(r);
-        // FIXME: Should probably indicate an error if nbytes > FIXNUM_BYTES
-        // Perhaps return the number of bytes actually written?
-        if (nbytes >= FIXNUM_BYTES) {
-            memcpy(s, bytes, FIXNUM_BYTES);
-        } else {
-            memcpy(s, bytes, nbytes);
-            memset(s + nbytes, 0, FIXNUM_BYTES - nbytes);
-        }
+        int n = min(nbytes, FIXNUM_BYTES);
+        memcpy(s, bytes, n);
+        memset(s + n, 0, FIXNUM_BYTES - n);
+        return n;
     }
 
-    __host__ static void to_bytes(uint8_t *bytes, int nbytes, const fixnum *r) {
-        // FIXME: Should probably indicate an error if nbytes < FIXNUM_BYTES
-        // Perhaps return the number of bytes actually written?
-        if (nbytes <= FIXNUM_BYTES) {
-            memcpy(bytes, r, FIXNUM_BYTES);
-        } else {
-            memcpy(bytes, r, FIXNUM_BYTES);
-            memset(bytes + FIXNUM_BYTES, 0, nbytes - FIXNUM_BYTES);
-        }
+    /*
+     * Set bytes using r, converting r to a base-256 unsigned
+     * integer. Return the number of bytes written. If nbytes <
+     * FIXNUM_BYTES, then the last FIXNUM_BYTES - nbytes are ignored.
+     *
+     * NB: Normally we would expect from_bytes to be exclusively a
+     * device function, but it's the same for the host, so we leave it
+     * in.
+     */
+    __host__ __device__ static int to_bytes(uint8_t *bytes, int nbytes, const fixnum *r) {
+        int n = min(nbytes, FIXNUM_BYTES);
+        memcpy(bytes, r, n);
+        return n;
     }
 
     // Get the slot index for the current thread.
+    // FIXME: This should go somewhere else.
     __device__ static int slot_idx() {
         int blk_tid_offset = blockDim.x * blockIdx.x;
         int tid_in_blk = threadIdx.x;
@@ -86,8 +101,8 @@ public:
     /*
      * r = lo_half(a * b)
      *
-     * The "lo_half" is the product modulo 2^(???), i.e. the same size as
-     * the inputs.
+     * The "lo_half" is the product modulo 2^(8*FIXNUM_BYTES),
+     * i.e. the same size as the inputs.
      */
     __device__ static void mul_lo(fixnum &r, fixnum a, fixnum b) {
         // TODO: This should be smaller, probably uint16_t (smallest
@@ -122,6 +137,8 @@ public:
         fixnum cy = 0;
         int L = slot_layout::laneIdx();
 
+        // TODO: Rewrite this using rotates instead of shuffles;
+        // should be simpler and faster.
         r = s = 0;
         for (int i = SLOT_WIDTH - 1; i >= 0; --i) {
             fixnum aa = slot_layout::shfl(a, i), t;
@@ -185,7 +202,8 @@ public:
 
 private:
     __device__ static int resolve_carries(fixnum &r, int cy) {
-        // FIXME: Use std::numeric_limits<fixnum>::max
+        // FIXME: Can't call std::numeric_limits<fixnum>::max() on device.
+        //static constexpr fixnum FIXNUM_MAX = std::numeric_limits<fixnum>::max();
         static constexpr fixnum FIXNUM_MAX = ~(fixnum)0;
         int L = slot_layout::laneIdx();
         uint32_t allcarries, p, g;
