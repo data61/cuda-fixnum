@@ -132,8 +132,18 @@ struct increments : public managed {
 template< typename fixnum_impl >
 struct square : public managed {
     typedef typename fixnum_impl::fixnum fixnum;
+
     __device__ void operator()(fixnum &r, fixnum a) {
         fixnum_impl::mul_lo(r, a, a);
+    }
+};
+
+template< typename fixnum_impl >
+struct sum : public managed {
+    typedef typename fixnum_impl::fixnum fixnum;
+
+    __device__ void operator()(fixnum &r, fixnum a) {
+        fixnum_impl::add_cy(r, a, a);
     }
 };
 
@@ -151,16 +161,18 @@ void bench(size_t nelts) {
     res = fixnum_array::create(nelts);
 
     typedef square<fixnum_impl> square;
-
     auto fn = unique_ptr<square>(new square);
+    // typedef sum<fixnum_impl> sum;
+    // auto fn = unique_ptr<sum>(new sum);
+
     clock_t c = clock();
     fixnum_array::map(fn.get(), res, in);
     c = clock() - c;
-    double total_MiB = (nelts / 1e6) * fn_bytes;
+    double total_MiB = fn_bytes * (double)nelts / (1 << 20);
     cout << "Throughput for "
          << nelts << " elements, "
          << fn_bytes << " bytes per element: "
-         << (1e3/total_MiB) * c/(double)CLOCKS_PER_SEC
+         << total_MiB * (double)CLOCKS_PER_SEC / c
          << " MiB/s (take with grain of salt)"
          << endl;
 
