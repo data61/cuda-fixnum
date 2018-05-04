@@ -22,8 +22,7 @@ static string fixnum_as_str(const uint8_t *fn, int nbytes) {
         // it be in the next loop iteration or in the conditional
         // below.
         ss << setfill('0') << setw(2) << hex;
-        // TODO: What is 'flush' doing here?
-        ss << (int)fn[i] << flush;
+        ss << (int)fn[i];
         if (i && !(i & 3))
             ss << ' ';
     }
