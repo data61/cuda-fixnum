@@ -27,8 +27,8 @@ static constexpr int WARPSIZE = 32;
  * Programming Guide, B.15). Create an interface that encapsulates
  * both.
  *
- * TODO: Work out if using __forceinline__ in these definitions could
- * actually achieve anything.
+ * TODO: Work out if using __forceinline__ in these definitions
+ * actually achieves anything.
  */
 
 template<int width = WARPSIZE>
