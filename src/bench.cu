@@ -1,4 +1,4 @@
-// -*- compile-command: "nvcc -Wno-deprecated-declarations -std=c++11 -lineinfo -Xcompiler -Wall,-Wextra -g -G -gencode arch=compute_50,code=sm_50 -o bench bench.cu" -*-
+// -*- compile-command: "nvcc -Wno-deprecated-declarations -std=c++11 -Xcompiler -Wall,-Wextra -g -G -gencode arch=compute_50,code=sm_50 -o bench bench.cu" -*-
 
 #include <memory>
 #include <iostream>
@@ -83,7 +83,7 @@ public:
         auto bytes = reinterpret_cast<const uint8_t *>(&init);
         return create(bytes, sizeof(T));
     }
-    
+
     __device__ void operator()(fixnum &s) {
         int L = fixnum_impl::slot_layout::laneIdx();
         s = konst[L];
@@ -93,9 +93,7 @@ private:
     typename fixnum_impl::fixnum konst[fixnum_impl::SLOT_WIDTH];
 };
 
-// TODO: Consider having functions inherit from fixnum_impl; this
-// would be like making the function a host and fixnum_impl the policy
-// in a policy-based design
+// fixnum_impl is like a policy in a policy-based design
 // (https://en.wikipedia.org/wiki/Policy-based_design).
 template< typename fixnum_impl >
 struct ec_add : public managed {
@@ -132,10 +130,53 @@ struct increments : public managed {
     }
 };
 
+template< typename fixnum_impl >
+struct square : public managed {
+    typedef typename fixnum_impl::fixnum fixnum;
+    __device__ void operator()(fixnum &r, fixnum a) {
+        fixnum_impl::mul_lo(r, a, a);
+    }
+};
+
+template< int fn_bytes >
+void bench(size_t nelts) {
+    typedef my_fixnum_impl<fn_bytes> fixnum_impl;
+    typedef fixnum_array<fixnum_impl> fixnum_array;
+
+    uint8_t *input = new uint8_t[fn_bytes * nelts];
+    for (size_t i = 0; i < fn_bytes * nelts; ++i)
+        input[i] = (i * 17 + 11) % 256;
+
+    fixnum_array *res, *in;
+    in = fixnum_array::create(input, fn_bytes * nelts, fn_bytes);
+    res = fixnum_array::create(nelts);
+
+    typedef square<fixnum_impl> square;
+
+    auto fn = unique_ptr<square>(new square);
+    clock_t c = clock();
+    fixnum_array::map(fn.get(), res, in);
+    c = clock() - c;
+    double total_MiB = (nelts / 1e6) * fn_bytes;
+    cout << "Throughput for "
+         << nelts << " elements, "
+         << fn_bytes << " bytes per element: "
+         << (1e3/total_MiB) * c/(double)CLOCKS_PER_SEC
+         << " MiB/s (take with grain of salt)"
+         << endl;
+
+    delete in;
+    delete res;
+    delete[] input;
+}
+
 int main(int argc, char *argv[]) {
-    long n = 16;
+    long n = 16, m = 1;
     if (argc > 1)
         n = atol(argv[1]);
+
+    if (argc > 2)
+        m = atol(argv[2]);
 
     typedef my_fixnum_impl<16> fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
@@ -147,10 +188,6 @@ int main(int argc, char *argv[]) {
     cout << "res  = " << res << endl;
     cout << "arr1 = " << arr1 << endl;
     cout << "arr2 = " << arr2 << endl;
-
-    // device_op should be able to start operating on the appropriate
-    // memory straight away
-    //device_op fn(7);
 
     // FIXME: How do I return cy without allocating a gigantic array
     // where each element is only 0 or 1? Need fixnum_array to have
@@ -168,6 +205,11 @@ int main(int argc, char *argv[]) {
     cout << "res  = " << res << endl;
     cout << "arr1 = " << arr1 << endl;
     cout << "arr2 = " << arr2 << endl;
+
+    bench<8>(m);
+    bench<16>(m);
+    bench<32>(m);
+    bench<64>(m);
 
     delete res;
     delete arr1;
