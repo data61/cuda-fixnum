@@ -1,4 +1,4 @@
-// -*- compile-command: "nvcc -Wno-deprecated-declarations -std=c++11 -Xcompiler -Wall,-Wextra -g -G -gencode arch=compute_50,code=sm_50 -o bench bench.cu" -*-
+// -*- compile-command: "nvcc -ccbin g++-4.9 -Wno-deprecated-declarations -std=c++11 -Xcompiler -Wall,-Wextra -g -G -gencode arch=compute_50,code=sm_50 -o bench bench.cu" -*-
 
 #include <memory>
 #include <iostream>
