@@ -133,3 +133,16 @@ fixnum_array<fixnum_impl>::map(Func<fixnum_impl> fn, Arg arg) {
         // retrieve result from chunk
     }
 }
+
+
+// input and output arrays?
+//
+// both must be backed by host memory
+// both must be backed by device memory
+// input arrays must be copied from host to device
+// output arrays must be copied from device to host
+//
+// arrays can be too big to fit on GPU (e.g. 512 GB machine)
+//
+// use a staging area?
+//
