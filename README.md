@@ -1,2 +1,2 @@
-# cuda-mpma
-Multi-Precision Modular Arithmetic library that targets CUDA
+# cuda-fixnum
+Fixed-precision SIMD library that targets CUDA.
