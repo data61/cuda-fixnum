@@ -2,9 +2,6 @@
 
 #include <memory>
 #include <iostream>
-#include <iomanip>
-#include <sstream>
-#include <string>
 #include <cstring>
 #include <cassert>
 
@@ -12,42 +9,6 @@
 #include "array/fixnum_array.h"
 
 using namespace std;
-
-static string fixnum_as_str(const uint8_t *fn, int nbytes) {
-    ostringstream ss;
-
-    for (int i = nbytes - 1; i >= 0; --i) {
-        // These IO manipulators are forgotten after each use;
-        // i.e. they don't apply to the next output operation (whether
-        // it be in the next loop iteration or in the conditional
-        // below.
-        ss << setfill('0') << setw(2) << hex;
-        ss << (int)fn[i];
-        if (i && !(i & 3))
-            ss << ' ';
-    }
-    return ss.str();
-}
-
-template< typename fixnum_impl >
-ostream &operator<<(ostream &os, const fixnum_array<fixnum_impl> *fn_arr) {
-    constexpr int fn_bytes = fixnum_impl::FIXNUM_BYTES;
-    constexpr size_t bufsz = 4096;
-    uint8_t arr[bufsz];
-    int nelts;
-
-    fn_arr->retrieve_all(arr, bufsz, &nelts);
-    os << "( ";
-    if (nelts < fn_arr->length()) {
-        os << "insufficient space to retrieve array";
-    } else if (nelts > 0) {
-        os << fixnum_as_str(arr, fn_bytes);
-        for (int i = 1; i < nelts; ++i)
-            os << ", " << fixnum_as_str(arr + i*fn_bytes, fn_bytes);
-    }
-    os << " )" << flush;
-    return os;
-}
 
 // TODO: Check whether the synchronize calls are necessary here (they
 // are clearly sufficient).

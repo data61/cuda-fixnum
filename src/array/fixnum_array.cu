@@ -1,8 +1,18 @@
-#include <algorithm> // for min
+// for printing arrays
+#include <iostream>
+#include <iomanip>
+#include <sstream>
+#include <string>
+// for min
+#include <algorithm>
 
 #include "util/cuda_wrap.h"
 #include "util/primitives.cu"
 #include "fixnum_array.h"
+
+// TODO: The only device function in this file is the dispatch kernel
+// mechanism, which could arguably be placed elsewhere, thereby
+// allowing this file to be compiled completely for the host.
 
 // Notes: Read programming guide Section K.3
 // - Can prefetch unified memory
@@ -93,6 +103,49 @@ fixnum_array<fixnum_impl>::retrieve_all(uint8_t *dest, size_t dest_space, int *d
         d += fixnum_impl::FIXNUM_BYTES;
     }
 }
+
+namespace {
+    std::string
+    fixnum_as_str(const uint8_t *fn, int nbytes) {
+        std::ostringstream ss;
+
+        for (int i = nbytes - 1; i >= 0; --i) {
+            // These IO manipulators are forgotten after each use;
+            // i.e. they don't apply to the next output operation (whether
+            // it be in the next loop iteration or in the conditional
+            // below.
+            ss << std::setfill('0') << std::setw(2) << std::hex;
+            ss << (int)fn[i];
+            if (i && !(i & 3))
+                ss << ' ';
+        }
+        return ss.str();
+    }
+}
+
+template< typename fixnum_impl >
+std::ostream &
+operator<<(std::ostream &os, const fixnum_array<fixnum_impl> *fn_arr) {
+    constexpr int fn_bytes = fixnum_impl::FIXNUM_BYTES;
+    constexpr size_t bufsz = 4096;
+    uint8_t arr[bufsz];
+    int nelts;
+
+    fn_arr->retrieve_all(arr, bufsz, &nelts);
+    os << "( ";
+    if (nelts < fn_arr->length()) {
+        os << "insufficient space to retrieve array";
+    } else if (nelts > 0) {
+        os << fixnum_as_str(arr, fn_bytes);
+        for (int i = 1; i < nelts; ++i)
+            os << ", " << fixnum_as_str(arr + i*fn_bytes, fn_bytes);
+    }
+    os << " )" << std::flush;
+    return os;
+}
+
+
+/* *********** */
 
 template< template <typename> class Func, typename fixnum_impl, typename... Args >
 __global__ void

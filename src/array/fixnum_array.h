@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <stdint.h>
 
 // fixnum_array handles representing an array of fixnums in memory,
@@ -46,5 +47,9 @@ private:
     fixnum_array(const fixnum_array &);
     fixnum_array &operator=(const fixnum_array &);
 };
+
+template< typename fixnum_impl >
+std::ostream &
+operator<<(std::ostream &os, const fixnum_array<fixnum_impl> *fn_arr);
 
 #include "fixnum_array.cu"
