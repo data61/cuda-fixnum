@@ -65,13 +65,13 @@ public:
     __device__ static int slot_idx() {
         int blk_tid_offset = blockDim.x * blockIdx.x;
         int tid_in_blk = threadIdx.x;
-        return (blk_tid_offset + tid_in_blk) / slot_layout::SLOT_WIDTH;
+        return (blk_tid_offset + tid_in_blk) / slot_layout::WIDTH;
     }
 
     // get/set the value from ptr corresponding to this thread (lane) in
     // slot number idx.
     __device__ static fixnum &get(fixnum *ptr, int idx) {
-        int off = idx * slot_layout::SLOT_WIDTH + slot_layout::laneIdx();
+        int off = idx * slot_layout::WIDTH + slot_layout::laneIdx();
         return ptr[off];
     }
 
@@ -113,7 +113,7 @@ public:
         fixnum cy = 0;
 
         r = 0;
-        for (int i = slot_layout::SLOT_WIDTH - 1; i >= 0; --i) {
+        for (int i = slot_layout::WIDTH - 1; i >= 0; --i) {
             fixnum aa = slot_layout::shfl(a, i);
 
             // TODO: See if using umad.wide improves this.
@@ -142,7 +142,7 @@ public:
         // TODO: Rewrite this using rotates instead of shuffles;
         // should be simpler and faster.
         r = s = 0;
-        for (int i = SLOT_WIDTH - 1; i >= 0; --i) {
+        for (int i = slot_layout::WIDTH - 1; i >= 0; --i) {
             fixnum aa = slot_layout::shfl(a, i), t;
 
             // TODO: Review this code: it seems to have more shuffles than
