@@ -6,8 +6,8 @@
 
 #include "fixnum/default.cu"
 #include "array/fixnum_array.h"
-#include "kernels/square.cu"
-#include "kernels/ec_add.cu"
+#include "functions/square.cu"
+#include "functions/ec_add.cu"
 
 using namespace std;
 
