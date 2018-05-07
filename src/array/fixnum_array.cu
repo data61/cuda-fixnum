@@ -1,8 +1,8 @@
 #include <algorithm> // for min
 
-#include "cuda_wrap.h"
+#include "util/cuda_wrap.h"
+#include "util/primitives.cu"
 #include "fixnum_array.h"
-#include "primitives.cu"
 
 // Notes: Read programming guide Section K.3
 // - Can prefetch unified memory

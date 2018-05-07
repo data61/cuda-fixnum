@@ -1,4 +1,4 @@
-// -*- compile-command: "nvcc -ccbin clang-3.8 -Wno-deprecated-declarations -std=c++11 -lineinfo -Xcompiler -Wall,-Wextra -gencode arch=compute_50,code=sm_50 -o bench bench.cu -lstdc++" -*-
+// -*- compile-command: "nvcc -I../src -ccbin clang-3.8 -Wno-deprecated-declarations -std=c++11 -lineinfo -Xcompiler -Wall,-Wextra -gencode arch=compute_50,code=sm_50 -o bench bench.cu -lstdc++" -*-
 
 #include <memory>
 #include <iostream>
@@ -8,8 +8,8 @@
 #include <cstring>
 #include <cassert>
 
-#include "fixnum.cu"
-#include "fixnum_array.h"
+#include "fixnum/default.cu"
+#include "array/fixnum_array.h"
 
 using namespace std;
 

@@ -2,6 +2,8 @@
 
 #include <math.h>
 #include <type_traits>
+
+#include "util/primitives.cu"
 #include "slot_layout.cu"
 
 /*
