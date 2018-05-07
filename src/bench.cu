@@ -1,4 +1,4 @@
-// -*- compile-command: "nvcc -ccbin g++-4.9 -Wno-deprecated-declarations -std=c++11 -Xcompiler -Wall,-Wextra -g -G -gencode arch=compute_50,code=sm_50 -o bench bench.cu" -*-
+// -*- compile-command: "nvcc -ccbin clang-3.8 -Wno-deprecated-declarations -std=c++11 -lineinfo -Xcompiler -Wall,-Wextra -gencode arch=compute_50,code=sm_50 -o bench bench.cu -lstdc++" -*-
 
 #include <memory>
 #include <iostream>
@@ -147,9 +147,9 @@ struct sum : public managed {
     }
 };
 
-template< int fn_bytes >
+template< int fn_bytes, typename word_tp = uint32_t >
 void bench(size_t nelts) {
-    typedef my_fixnum_impl<fn_bytes> fixnum_impl;
+    typedef my_fixnum_impl<fn_bytes, word_tp> fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
 
     uint8_t *input = new uint8_t[fn_bytes * nelts];
@@ -169,9 +169,8 @@ void bench(size_t nelts) {
     fixnum_array::map(fn.get(), res, in);
     c = clock() - c;
     double total_MiB = fn_bytes * (double)nelts / (1 << 20);
-    cout << "Throughput for "
-         << nelts << " elements, "
-         << fn_bytes << " bytes per element: "
+    cout << nelts << " elts, "
+         << setw(3) << fn_bytes << " (" << sizeof(word_tp) << ") bytes per element: "
          << total_MiB * (double)CLOCKS_PER_SEC / c
          << " MiB/s (take with grain of salt)"
          << endl;
@@ -217,10 +216,20 @@ int main(int argc, char *argv[]) {
     cout << "arr1 = " << arr1 << endl;
     cout << "arr2 = " << arr2 << endl;
 
+    cout << endl << "uint32:" << endl;
     bench<8>(m);
     bench<16>(m);
     bench<32>(m);
     bench<64>(m);
+    bench<128>(m);
+
+    cout << endl << "uint64:" << endl;
+    bench<8, uint64_t>(m);
+    bench<16, uint64_t>(m);
+    bench<32, uint64_t>(m);
+    bench<64, uint64_t>(m);
+    bench<128, uint64_t>(m);
+    bench<256, uint64_t>(m);
 
     delete res;
     delete arr1;
