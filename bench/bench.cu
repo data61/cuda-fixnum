@@ -7,106 +7,10 @@
 
 #include "fixnum/default.cu"
 #include "array/fixnum_array.h"
+#include "kernels/square.cu"
+#include "kernels/ec_add.cu"
 
 using namespace std;
-
-// TODO: Check whether the synchronize calls are necessary here (they
-// are clearly sufficient).
-struct managed {
-    void *operator new(size_t bytes) {
-        void *ptr;
-        cuda_malloc_managed(&ptr, bytes);
-        cuda_device_synchronize();
-        return ptr;
-    }
-
-    void operator delete(void *ptr) {
-        cuda_device_synchronize();
-        cuda_free(ptr);
-    }
-};
-
-template< typename fixnum_impl >
-class set_const : public managed {
-public:
-    // FIXME: The repetition of this is dumb and annoying
-    typedef typename fixnum_impl::fixnum fixnum;
-
-    static set_const *create(const uint8_t *konst, int nbytes) {
-        set_const *sc = new set_const;
-        fixnum_impl::from_bytes(sc->konst, konst, nbytes);
-        return sc;
-    }
-
-    template< typename T >
-    static set_const *create(T init) {
-        auto bytes = reinterpret_cast<const uint8_t *>(&init);
-        return create(bytes, sizeof(T));
-    }
-
-    __device__ void operator()(fixnum &s) {
-        int L = fixnum_impl::slot_layout::laneIdx();
-        s = konst[L];
-    }
-
-private:
-    typename fixnum_impl::fixnum konst[fixnum_impl::SLOT_WIDTH];
-};
-
-// fixnum_impl is like a policy in a policy-based design
-// (https://en.wikipedia.org/wiki/Policy-based_design).
-template< typename fixnum_impl >
-struct ec_add : public managed {
-    typedef typename fixnum_impl::fixnum fixnum;
-
-    set_const<fixnum_impl> *set_k;
-
-    ec_add(/* ec params */ long k = 17)
-    : set_k(set_const<fixnum_impl>::create(k)) { }
-
-    ~ec_add() { delete set_k; }
-
-    __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
-        fixnum k;
-        (*set_k)(k);
-        fixnum_impl::mul_lo(r, a, k);
-        fixnum_impl::mul_lo(r, r, b);
-        fixnum_impl::mul_lo(r, r, r);
-        fixnum_impl::mul_lo(r, r, r);
-    }
-};
-
-template< typename fixnum_impl >
-struct increments : public managed {
-    typedef typename fixnum_impl::fixnum fixnum;
-    long k;
-
-    increments(long k_ = 17) : k(k_) { }
-
-    __device__ void operator()(fixnum &r, fixnum a) {
-        r = a;
-        for (long i = 0; i < k; ++i)
-            fixnum_impl::incr_cy(r);
-    }
-};
-
-template< typename fixnum_impl >
-struct square : public managed {
-    typedef typename fixnum_impl::fixnum fixnum;
-
-    __device__ void operator()(fixnum &r, fixnum a) {
-        fixnum_impl::mul_lo(r, a, a);
-    }
-};
-
-template< typename fixnum_impl >
-struct sum : public managed {
-    typedef typename fixnum_impl::fixnum fixnum;
-
-    __device__ void operator()(fixnum &r, fixnum a) {
-        fixnum_impl::add_cy(r, a, a);
-    }
-};
 
 template< int fn_bytes, typename word_tp = uint32_t >
 void bench(size_t nelts) {
@@ -123,8 +27,6 @@ void bench(size_t nelts) {
 
     typedef square<fixnum_impl> square;
     auto fn = unique_ptr<square>(new square);
-    // typedef sum<fixnum_impl> sum;
-    // auto fn = unique_ptr<sum>(new sum);
 
     clock_t c = clock();
     fixnum_array::map(fn.get(), res, in);
@@ -167,7 +69,7 @@ int main(int argc, char *argv[]) {
 
     auto fn1 = new ec_add<fixnum_impl>();
     fixnum_array::map(fn1, res, arr1, arr2);
-    auto fn2 = new increments<fixnum_impl>(1);
+    auto fn2 = new square<fixnum_impl>();
     fixnum_array::map(fn2, res, arr1);
 
     delete fn1;
