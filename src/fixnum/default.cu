@@ -14,7 +14,7 @@
  * problem to get the data onto the device.
  */
 template< int FIXNUM_BYTES_, typename word_tp_ = uint32_t >
-class my_fixnum_impl {
+class default_fixnum_impl {
     static_assert(FIXNUM_BYTES_ > 0,
             "Fixnum bytes must be positive.");
     static_assert(FIXNUM_BYTES_ % sizeof(word_tp_) == 0,

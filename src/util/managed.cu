@@ -1,5 +1,7 @@
 #pragma once
 
+#include "cuda_wrap.h"
+
 // TODO: Check whether the synchronize calls are necessary here (they
 // are clearly sufficient). Maybe they should be cudaStreamSynchronize()?
 struct managed {

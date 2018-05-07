@@ -1,6 +1,5 @@
 // -*- compile-command: "nvcc -I../src -ccbin clang-3.8 -Wno-deprecated-declarations -std=c++11 -lineinfo -Xcompiler -Wall,-Wextra -gencode arch=compute_50,code=sm_50 -o bench bench.cu -lstdc++" -*-
 
-#include <memory>
 #include <iostream>
 #include <cstring>
 #include <cassert>
@@ -14,7 +13,7 @@ using namespace std;
 
 template< int fn_bytes, typename word_tp = uint32_t >
 void bench(size_t nelts) {
-    typedef my_fixnum_impl<fn_bytes, word_tp> fixnum_impl;
+    typedef default_fixnum_impl<fn_bytes, word_tp> fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
 
     uint8_t *input = new uint8_t[fn_bytes * nelts];
@@ -51,7 +50,7 @@ int main(int argc, char *argv[]) {
     if (argc > 2)
         m = atol(argv[2]);
 
-    typedef my_fixnum_impl<16> fixnum_impl;
+    typedef default_fixnum_impl<16> fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
 
     auto res = fixnum_array::create(n);
