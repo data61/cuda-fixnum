@@ -8,6 +8,7 @@
 
 #include "util/cuda_wrap.h"
 #include "util/primitives.cu"
+#include "functions/set_const.cu"
 #include "fixnum_array.h"
 
 // TODO: The only device function in this file is the dispatch kernel
@@ -20,7 +21,6 @@
 
 // TODO: Can I use smart pointers? unique_ptr?
 
-// TODO: Refactor these three constructors
 template< typename fixnum_impl >
 fixnum_array<fixnum_impl> *
 fixnum_array<fixnum_impl>::create(size_t nelts) {
@@ -32,9 +32,6 @@ fixnum_array<fixnum_impl>::create(size_t nelts) {
     }
     return a;
 }
-
-template< typename fixnum_impl >
-struct set_const;
 
 template< typename fixnum_impl >
 template< typename T >
@@ -115,7 +112,7 @@ namespace {
             // it be in the next loop iteration or in the conditional
             // below.
             ss << std::setfill('0') << std::setw(2) << std::hex;
-            ss << (int)fn[i];
+            ss << static_cast<int>(fn[i]);
             if (i && !(i & 3))
                 ss << ' ';
         }
