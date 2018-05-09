@@ -3,15 +3,6 @@
 #include <iostream>
 #include <stdint.h>
 
-// fixnum_array handles representing an array of fixnums in memory,
-// including translating to and from the "raw" representation of the
-// fixnum.
-// 
-// parameterised by
-// fixnum implementation, which determines #bits per fixnum
-//   and which is itself parameterised by
-// subwarp data, which determines a SIMD decomposition of a fixnum
-//
 // TODO: Copy over functionality and documentation from IntmodVector.
 template< typename fixnum_impl >
 class fixnum_array {
