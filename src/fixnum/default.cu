@@ -60,14 +60,6 @@ public:
         return n;
     }
 
-    // Get the slot index for the current thread.
-    // FIXME: This should go somewhere else.
-    __device__ static int slot_idx() {
-        int blk_tid_offset = blockDim.x * blockIdx.x;
-        int tid_in_blk = threadIdx.x;
-        return (blk_tid_offset + tid_in_blk) / slot_layout::WIDTH;
-    }
-
     // get/set the value from ptr corresponding to this thread (lane) in
     // slot number idx.
     __device__ static fixnum &get(fixnum *ptr, int idx) {

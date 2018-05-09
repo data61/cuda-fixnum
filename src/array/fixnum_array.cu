@@ -150,7 +150,11 @@ operator<<(std::ostream &os, const fixnum_array<fixnum_impl> *fn_arr) {
 template< template <typename> class Func, typename fixnum_impl, typename... Args >
 __global__ void
 dispatch(Func<fixnum_impl> *fn, int nelts, Args... args) {
-    int idx = fixnum_impl::slot_idx();
+    // Get the slot index for the current thread.
+    int blk_tid_offset = blockDim.x * blockIdx.x;
+    int tid_in_blk = threadIdx.x;
+    int idx = (blk_tid_offset + tid_in_blk) / fixnum_impl::SLOT_WIDTH;
+
     if (idx < nelts)
         (*fn)(fixnum_impl::get(args, idx)...);
 }
