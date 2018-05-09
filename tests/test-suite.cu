@@ -1,5 +1,3 @@
-// -*- compile-command: "nvcc -I../src -ccbin clang-3.8 -Wno-deprecated-declarations -std=c++11 -lineinfo -Xcompiler -Wall,-Wextra -gencode arch=compute_50,code=sm_50 -o test-suite test-suite.cu -lstdc++ -lgtest" -*-
-
 #include <gtest/gtest.h>
 #include "array/fixnum_array.h"
 #include "fixnum/default.cu"
