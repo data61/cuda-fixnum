@@ -6,6 +6,7 @@
 // instead.
 static constexpr int WARPSIZE = 32;
 
+// TODO: Tidy up nomenclature: SUBWARP -> Slot
 /*
  * SUBWARPS:
  *
