@@ -163,6 +163,8 @@ fixnum_array<fixnum_impl>::map(Func<fixnum_impl> *fn, Args... args) {
     // TODO: Set this to the number of threads on a single SM on the host GPU.
     constexpr int BLOCK_SIZE = 192;
 
+    // FIXME: WARPSIZE should come from slot_layout
+    constexpr int WARPSIZE = 32;
     // BLOCK_SIZE must be a multiple of warpSize
     static_assert(!(BLOCK_SIZE % WARPSIZE),
             "block size must be a multiple of warpSize");
