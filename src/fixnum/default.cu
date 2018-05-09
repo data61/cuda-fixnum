@@ -28,6 +28,10 @@ public:
     typedef slot_layout< SLOT_WIDTH > slot_layout;
     typedef word_tp fixnum;
 
+    /***************************
+     * Representation functions.
+     */
+
     /*
      * Set r using bytes, interpreting bytes as a base-256 unsigned
      * integer. Return the number of bytes used. If nbytes >
@@ -60,12 +64,19 @@ public:
         return n;
     }
 
-    // get/set the value from ptr corresponding to this thread (lane) in
-    // slot number idx.
+    /*
+     * get/set the value from ptr corresponding to this thread (lane) in
+     * slot number idx.
+     */
     __device__ static fixnum &get(fixnum *ptr, int idx) {
         int off = idx * slot_layout::WIDTH + slot_layout::laneIdx();
         return ptr[off];
     }
+
+
+    /***********************
+     * Arithmetic functions.
+     */
 
     __device__ static int add_cy(fixnum &r, fixnum a, fixnum b) {
         int cy;
