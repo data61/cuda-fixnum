@@ -14,7 +14,7 @@ TEST(basic_arithmetic, square) {
     auto arr2 = fixnum_array::create(n, ~0UL);
     auto arr3 = fixnum_array::create(n, 245);
     auto sqr = new square<fixnum_impl>();
-    
+
     fixnum_array::map(sqr, res, arr1);
     // check that res is all zeros
     constexpr int fn_bytes = fixnum_impl::FIXNUM_BYTES;
