@@ -120,7 +120,7 @@ class add_cy_test : public ::testing::TestWithParam<binop_args> { };
 static int skipped = 0;
 
 TEST_P(add_cy_test, basic) {
-    static constexpr int FIXNUM_BYTES = 256;
+    static constexpr size_t FIXNUM_BYTES = 256;
     typedef default_fixnum_impl<FIXNUM_BYTES, uint64_t> fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
 
@@ -131,13 +131,7 @@ TEST_P(add_cy_test, basic) {
     const byte_array &y = args[1];
     const byte_array &expected = args[2];
 
-    // FIXME: Should handle these cases somehow.
-    if (x.size() > FIXNUM_BYTES
-            || y.size() > FIXNUM_BYTES
-            || expected.size() > FIXNUM_BYTES) {
-        ++skipped;
-        return;
-    }
+    size_t expected_len = std::min(expected.size(), FIXNUM_BYTES);
 
     int n = 1;
     auto res = fixnum_array::create(n);
@@ -156,9 +150,9 @@ TEST_P(add_cy_test, basic) {
 
     EXPECT_EQ(res->length(), n);
     EXPECT_EQ(nelts, n);
-    EXPECT_LE(expected.size(), fn_bytes);
+    EXPECT_LE(expected_len, fn_bytes);
 
-    EXPECT_TRUE(arrays_are_equal(expected.data(), expected.size(), arr, nelts * fn_bytes));
+    EXPECT_TRUE(arrays_are_equal(expected.data(), expected_len, arr, nelts * fn_bytes));
 
     delete fn;
     delete res;
@@ -192,12 +186,6 @@ TEST_P(mul_lo_test, basic) {
     const byte_array &y = args[1];
     const byte_array &expected = args[2];
 
-    // FIXME: Should handle these cases somehow.
-    if (x.size() > FIXNUM_BYTES
-            || y.size() > FIXNUM_BYTES) {
-        ++skipped;
-        return;
-    }
     size_t expected_len = std::min(expected.size(), FIXNUM_BYTES);
 
     int n = 1;
