@@ -47,7 +47,11 @@ fixnum_array<fixnum_impl>::create(size_t nelts, T init) {
 template< typename fixnum_impl >
 fixnum_array<fixnum_impl> *
 fixnum_array<fixnum_impl>::create(const uint8_t *data, size_t total_bytes, size_t bytes_per_elt) {
-    size_t nelts = total_bytes / bytes_per_elt;
+    // FIXME: Should handle this error more appropriately
+    if (total_bytes == 0 || bytes_per_elt == 0)
+        return nullptr;
+
+    size_t nelts = iceil(total_bytes, bytes_per_elt);
     fixnum_array *a = create(nelts);
 
     word_tp *p = a->ptr;
