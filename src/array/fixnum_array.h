@@ -18,6 +18,7 @@ public:
 
     int length() const;
 
+    int set(int idx, const uint8_t *data, size_t len);
     size_t retrieve_into(uint8_t *dest, size_t dest_space, int idx) const;
     void retrieve_all(uint8_t *dest, size_t dest_space, int *nelts) const;
 

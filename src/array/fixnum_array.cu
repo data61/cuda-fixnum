@@ -66,6 +66,17 @@ fixnum_array<fixnum_impl>::create(const uint8_t *data, size_t total_bytes, size_
 
 
 template< typename fixnum_impl >
+int
+fixnum_array<fixnum_impl>::set(int idx, const uint8_t *data, size_t nbytes) {
+    // FIXME: Better error handling
+    if (idx < 0 || idx >= this->nelts)
+        return -1;
+
+    int off = idx * FIXNUM_STORAGE_WORDS;
+    return fixnum_impl::from_bytes(this->ptr + off, data, nbytes);
+}
+
+template< typename fixnum_impl >
 fixnum_array<fixnum_impl>::~fixnum_array() {
     if (nelts > 0)
         cuda_free(ptr);
@@ -85,9 +96,7 @@ fixnum_array<fixnum_impl>::retrieve_into(uint8_t *dest, size_t dest_space, int i
         // bounds" error.
         return 0;
     }
-    fixnum_impl::to_bytes(dest, dest_space, ptr + idx * FIXNUM_STORAGE_WORDS);
-    // FIXME: Return correct value.
-    return dest_space;
+    return fixnum_impl::to_bytes(dest, dest_space, ptr + idx * FIXNUM_STORAGE_WORDS);
 }
 
 // FIXME: Can return fewer than nelts elements.
