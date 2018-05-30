@@ -66,9 +66,7 @@ vector<binop_args> fname_to_args(const char *fname) {
     auto s = unique_ptr<const sexp>(sexp::create(file));
     extract_all_args v;
     s->accept(v);
-    auto res = v.result();
-    cout << "Read " << res.size() << " args." << endl;
-    return res;
+    return v.result();
 }
 
 ::testing::AssertionResult arrays_are_equal(
@@ -99,13 +97,6 @@ vector<binop_args> fname_to_args(const char *fname) {
     return ::testing::AssertionSuccess();
 }
 
-template< typename fixnum_array >
-fixnum_array *read_arg(const byte_array &arg) {
-    return arg.size() > 0
-        ? fixnum_array::create(arg.data(), arg.size(), arg.size())
-        : fixnum_array::create(1, 0);
-}
-
 template< typename fixnum_impl >
 struct add_cy : public managed {
     typedef typename fixnum_impl::fixnum fixnum;
@@ -114,54 +105,6 @@ struct add_cy : public managed {
         fixnum_impl::add_cy(r, a, b);
     }
 };
-
-class add_cy_test : public ::testing::TestWithParam<binop_args> { };
-
-static int skipped = 0;
-
-TEST_P(add_cy_test, basic) {
-    static constexpr size_t FIXNUM_BYTES = 256;
-    typedef default_fixnum_impl<FIXNUM_BYTES, uint64_t> fixnum_impl;
-    typedef fixnum_array<fixnum_impl> fixnum_array;
-
-    //const byte_array x, y, expected;
-    //tie(x, y, expected) = GetParam();
-    const binop_args &args = GetParam();
-    const byte_array &x = args[0];
-    const byte_array &y = args[1];
-    const byte_array &expected = args[2];
-
-    size_t expected_len = std::min(expected.size(), FIXNUM_BYTES);
-
-    int n = 1;
-    auto res = fixnum_array::create(n);
-    auto xx = read_arg<fixnum_array>(x);
-    auto yy = read_arg<fixnum_array>(y);
-    auto fn = new add_cy<fixnum_impl>();
-
-    fixnum_array::map(fn, res, xx, yy);
-
-    constexpr int fn_bytes = fixnum_impl::FIXNUM_BYTES;
-    constexpr int bufsz = 4096;
-    uint8_t arr[bufsz];
-    int nelts;
-    for (auto &a : arr) a = 0;
-    res->retrieve_all(arr, bufsz, &nelts);
-
-    EXPECT_EQ(res->length(), n);
-    EXPECT_EQ(nelts, n);
-    EXPECT_LE(expected_len, fn_bytes);
-
-    EXPECT_TRUE(arrays_are_equal(expected.data(), expected_len, arr, nelts * fn_bytes));
-
-    delete fn;
-    delete res;
-    delete xx;
-    delete yy;
-}
-
-INSTANTIATE_TEST_CASE_P(add_cy_inst, add_cy_test,
-                        ::testing::ValuesIn(fname_to_args("tests/add_cy")));
 
 template< typename fixnum_impl >
 struct mul_lo : public managed {
@@ -172,51 +115,64 @@ struct mul_lo : public managed {
     }
 };
 
-class mul_lo_test : public ::testing::TestWithParam<binop_args> { };
+class Primitives : public ::testing::TestWithParam<int> { };
 
-TEST_P(mul_lo_test, basic) {
+TEST_P(Primitives, precomputed) {
     static constexpr size_t FIXNUM_BYTES = 256;
     typedef default_fixnum_impl<FIXNUM_BYTES, uint64_t> fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
 
-    //const byte_array x, y, expected;
-    //tie(x, y, expected) = GetParam();
-    const binop_args &args = GetParam();
-    const byte_array &x = args[0];
-    const byte_array &y = args[1];
-    const byte_array &expected = args[2];
+    int algo = GetParam();
+    const char *fname = algo == 0 ? "tests/add_cy" : "tests/mul_wide";
+    vector<binop_args> tcases = fname_to_args(fname);
+    int n = (int) tcases.size();
+    fixnum_array *xs, *ys, *res;
 
-    size_t expected_len = std::min(expected.size(), FIXNUM_BYTES);
+    xs = fixnum_array::create(n);
+    ys = fixnum_array::create(n);
+    res = fixnum_array::create(n);
 
-    int n = 1;
-    auto res = fixnum_array::create(n);
-    auto xx = read_arg<fixnum_array>(x);
-    auto yy = read_arg<fixnum_array>(y);
-    auto fn = new mul_lo<fixnum_impl>();
+    for (int i = 0; i < n; ++i) {
+        const binop_args &arg = tcases[i];
+        const byte_array &x = arg[0];
+        const byte_array &y = arg[1];
+        int r;
 
-    fixnum_array::map(fn, res, xx, yy);
+        r = xs->set(i, x.data(), x.size());
+        ASSERT_EQ(r, std::min(x.size(), FIXNUM_BYTES));
+        r = ys->set(i, y.data(), y.size());
+        ASSERT_EQ(r, std::min(y.size(), FIXNUM_BYTES));
+    }
 
-    constexpr int fn_bytes = fixnum_impl::FIXNUM_BYTES;
-    constexpr int bufsz = 4096;
-    uint8_t arr[bufsz];
-    int nelts;
-    for (auto &a : arr) a = 0;
-    res->retrieve_all(arr, bufsz, &nelts);
+    if (algo == 0) {
+        auto fn_add = new add_cy<fixnum_impl>();
+        fixnum_array::map(fn_add, res, xs, ys);
+        delete fn_add;
+    } else {
+        auto fn_mul = new mul_lo<fixnum_impl>();
+        fixnum_array::map(fn_mul, res, xs, ys);
+        delete fn_mul;
+    }
 
     EXPECT_EQ(res->length(), n);
-    EXPECT_EQ(nelts, n);
-    EXPECT_LE(expected_len, fn_bytes);
+    for (int i = 0; i < n; ++i) {
+        const byte_array &expected = tcases[i][2];
+        uint8_t arr[FIXNUM_BYTES];
+        memset(arr, 0, FIXNUM_BYTES);
+        size_t r = res->retrieve_into(arr, FIXNUM_BYTES, i);
+        ASSERT_EQ(r, FIXNUM_BYTES);
 
-    EXPECT_TRUE(arrays_are_equal(expected.data(), expected_len, arr, nelts * fn_bytes));
+        size_t expected_len = std::min(expected.size(), FIXNUM_BYTES);
+        EXPECT_TRUE(arrays_are_equal(expected.data(), expected_len, arr, FIXNUM_BYTES));
+    }
 
-    delete fn;
     delete res;
-    delete xx;
-    delete yy;
+    delete xs;
+    delete ys;
 }
 
-INSTANTIATE_TEST_CASE_P(mul_lo_inst, mul_lo_test,
-                        ::testing::ValuesIn(fname_to_args("tests/mul_wide")));
+INSTANTIATE_TEST_CASE_P(All_Primitives, Primitives, ::testing::Values(0, 1));
+
 
 TEST(basic_arithmetic, square) {
     typedef default_fixnum_impl<16> fixnum_impl;
@@ -273,7 +229,5 @@ int main(int argc, char *argv[])
 
     testing::InitGoogleTest(&argc, argv);
     r = RUN_ALL_TESTS();
-
-    cout << "(Skipped " << skipped << " tests)." << endl;
     return r;
 }
