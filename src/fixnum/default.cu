@@ -210,6 +210,7 @@ private:
         // FIXME: Can't call std::numeric_limits<fixnum>::max() on device.
         //static constexpr fixnum FIXNUM_MAX = std::numeric_limits<fixnum>::max();
         static constexpr fixnum FIXNUM_MAX = ~(fixnum)0;
+        static constexpr int WIDTH = slot_layout::WIDTH;
         int L = slot_layout::laneIdx();
         uint32_t allcarries, p, g;
         int cy_hi;
@@ -217,9 +218,10 @@ private:
         g = slot_layout::ballot(cy);              // carry generate
         p = slot_layout::ballot(r == FIXNUM_MAX); // carry propagate
         allcarries = (p | g) + g;                 // propagate all carries
-        // FIXME: This is not correct when WIDTH != warpSize
-        cy_hi = allcarries < g;                   // detect final overflow
-        //cy_hi = (width == 32) ? (allcarries < g) : ((allcarries >> width) & 1);
+        // FIXME: Unify these two expressions to remove the conditional;
+        // the simple expression is not correct when WIDTH != warpSize
+        //cy_hi = allcarries < g;                   // detect final overflow
+        cy_hi = (WIDTH == 32) ? (allcarries < g) : ((allcarries >> WIDTH) & 1);
         allcarries = (allcarries ^ p) | (g << 1); // get effective carries
         r += (allcarries >> L) & 1;
 
