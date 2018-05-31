@@ -111,10 +111,10 @@ umad_lo_cc(uint32_t &lo, uint32_t &cy, uint32_t a, uint32_t b, uint32_t c) {
 }
 
 __device__ __forceinline__ void
-umad_hi_cc(uint32_t &lo, uint32_t &cy, uint32_t a, uint32_t b, uint32_t c) {
+umad_hi_cc(uint32_t &hi, uint32_t &cy, uint32_t a, uint32_t b, uint32_t c) {
     asm ("mad.hi.cc.u32 %0, %2, %3, %4;\n\t"
          "addc.u32 %1, %1, 0;"
-         : "=r"(lo), "+r"(cy)
+         : "=r"(hi), "+r"(cy)
          : "r"(a), "r" (b), "r"(c));
 }
 
@@ -127,10 +127,10 @@ umad_lo_cc(uint64_t &lo, uint64_t &cy, uint64_t a, uint64_t b, uint64_t c) {
 }
 
 __device__ __forceinline__ void
-umad_hi_cc(uint64_t &lo, uint64_t &cy, uint64_t a, uint64_t b, uint64_t c) {
+umad_hi_cc(uint64_t &hi, uint64_t &cy, uint64_t a, uint64_t b, uint64_t c) {
     asm ("mad.hi.cc.u64 %0, %2, %3, %4;\n\t"
          "addc.u64 %1, %1, 0;"
-         : "=l"(lo), "+l"(cy)
+         : "=l"(hi), "+l"(cy)
          : "l"(a), "l" (b), "l"(c));
 }
 
