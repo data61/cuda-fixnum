@@ -1,7 +1,9 @@
 #include <gtest/gtest.h>
 #include <tuple>
+#include <iomanip>
 #include <vector>
 #include <memory>
+#include <algorithm>
 #include <fstream>
 #include "sexp.h"
 
@@ -109,15 +111,6 @@ struct add_cy : public managed {
     }
 };
 
-template< typename fixnum_impl >
-struct mul_lo : public managed {
-    typedef typename fixnum_impl::fixnum fixnum;
-
-    __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
-        fixnum_impl::mul_lo(r, a, b);
-    }
-};
-
 
 template< typename fixnum_impl_ >
 struct TypedPrimitives : public ::testing::Test {
@@ -150,11 +143,30 @@ void set_args_from_tcases(
         vector<binop_args> &tcases,
         fixnum_array<fixnum_impl> *&res,
         fixnum_array<fixnum_impl> *&xs,
-        fixnum_array<fixnum_impl> *&ys)
+        fixnum_array<fixnum_impl> *&ys,
+        bool truncate = true)
 {
     static constexpr size_t FIXNUM_BYTES = fixnum_impl::FIXNUM_BYTES;
     typedef fixnum_array<fixnum_impl> fixnum_array;
     tcases = fname_to_args(fname);
+
+    // Filter out test cases whose arguments would be truncated
+    if ( ! truncate) {
+        auto args_too_big = [] (binop_args &args) {
+            return args[0].size() > FIXNUM_BYTES
+                || args[1].size() > FIXNUM_BYTES;
+        };
+        auto it = remove_if(tcases.begin(), tcases.end(), args_too_big);
+        int nskipped = static_cast<int>(tcases.end() - it);
+        if (nskipped > 0) {
+            int ntests = tcases.size();
+            cerr << "Skipping " << nskipped << " / " << ntests
+                 << " (" << setprecision(3) << nskipped * 100.0 / ntests << "%) "
+                 << "tests to avoid truncation." << endl;
+            tcases.erase(it, tcases.end());
+        }
+    }
+
     int n = (int) tcases.size();
 
     xs = fixnum_array::create(n);
@@ -176,8 +188,8 @@ void set_args_from_tcases(
 
 template< typename fixnum_impl >
 void check_result(
-        const vector<binop_args> &tcases,
-        const fixnum_array<fixnum_impl> *res)
+    const vector<binop_args> &tcases,
+    const fixnum_array<fixnum_impl> *res)
 {
     static constexpr size_t FIXNUM_BYTES = fixnum_impl::FIXNUM_BYTES;
     int n = (int) tcases.size();
@@ -194,6 +206,35 @@ void check_result(
     }
 }
 
+template< typename fixnum_impl >
+void check_result2(
+    const vector<binop_args> &tcases,
+    const fixnum_array<fixnum_impl> *rs,
+    const fixnum_array<fixnum_impl> *ss)
+{
+    static constexpr size_t FIXNUM_BYTES = fixnum_impl::FIXNUM_BYTES;
+    int n = (int) tcases.size();
+    EXPECT_EQ(rs->length(), n);
+    EXPECT_EQ(ss->length(), n);
+    for (int i = 0; i < n; ++i) {
+        static constexpr size_t arrlen = FIXNUM_BYTES * 2;
+        uint8_t arr[arrlen];
+        size_t b;
+
+        const byte_array &expected = tcases[i][2];
+
+        memset(arr, 0, arrlen);
+        b = rs->retrieve_into(arr, FIXNUM_BYTES, i);
+        ASSERT_EQ(b, FIXNUM_BYTES);
+        b = ss->retrieve_into(arr + FIXNUM_BYTES, FIXNUM_BYTES, i);
+        ASSERT_EQ(b, FIXNUM_BYTES);
+
+        size_t expected_len = std::min(expected.size(), arrlen);
+        EXPECT_TRUE(arrays_are_equal(expected.data(), expected_len, arr, arrlen)
+                    << " at index i = " << i);
+    }
+}
+
 TYPED_TEST(TypedPrimitives, add_cy) {
     typedef typename TestFixture::fixnum_impl fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
@@ -206,12 +247,21 @@ TYPED_TEST(TypedPrimitives, add_cy) {
     fixnum_array::map(fn, res, xs, ys);
     delete fn;
 
+    // FIXME: check for carries
     check_result(tcases, res);
     delete res;
     delete xs;
     delete ys;
 }
 
+template< typename fixnum_impl >
+struct mul_lo : public managed {
+    typedef typename fixnum_impl::fixnum fixnum;
+
+    __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
+        fixnum_impl::mul_lo(r, a, b);
+    }
+};
 
 TYPED_TEST(TypedPrimitives, mul_lo) {
     typedef typename TestFixture::fixnum_impl fixnum_impl;
@@ -227,6 +277,38 @@ TYPED_TEST(TypedPrimitives, mul_lo) {
 
     check_result(tcases, res);
     delete res;
+    delete xs;
+    delete ys;
+}
+
+template< typename fixnum_impl >
+struct mul_wide : public managed {
+    typedef typename fixnum_impl::fixnum fixnum;
+
+    __device__ void operator()(fixnum &s, fixnum &r, fixnum a, fixnum b) {
+        fixnum_impl::mul_wide(s, r, a, b);
+    }
+};
+
+TYPED_TEST(TypedPrimitives, mul_wide) {
+    typedef typename TestFixture::fixnum_impl fixnum_impl;
+    typedef fixnum_array<fixnum_impl> fixnum_array;
+    static constexpr bool TRUNCATE = false;
+
+    fixnum_array *his, *los, *xs, *ys;
+    vector<binop_args> tcases;
+    set_args_from_tcases("tests/mul_wide", tcases, los, xs, ys, TRUNCATE);
+    // FIXME:
+    his = fixnum_array::create(tcases.size());
+
+    auto fn = new mul_wide<fixnum_impl>();
+    fixnum_array::map(fn, his, los, xs, ys);
+    delete fn;
+
+    // FIXME:
+    check_result2(tcases, los, his);
+    delete his;
+    delete los;
     delete xs;
     delete ys;
 }
