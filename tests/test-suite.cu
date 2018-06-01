@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <algorithm>
+#include <initializer_list>
 #include <fstream>
 #include "sexp.h"
 
@@ -189,50 +190,46 @@ void set_args_from_tcases(
 template< typename fixnum_impl >
 void check_result(
     const vector<binop_args> &tcases,
-    const fixnum_array<fixnum_impl> *res)
+    initializer_list<const fixnum_array<fixnum_impl> *> args)
 {
+    typedef const fixnum_array<fixnum_impl> *arg_ptr;
     static constexpr size_t FIXNUM_BYTES = fixnum_impl::FIXNUM_BYTES;
+
+    // All arguments must be the same length
     int n = (int) tcases.size();
-    EXPECT_EQ(res->length(), n);
+    for_each(args.begin(), args.end(),
+        [n] (arg_ptr arg) { EXPECT_EQ(arg->length(), n); });
+
+    // We will concatenate corresponding elements from args into arr for
+    // comparison with their corresponding result in tcases.
+    int nargs = args.size();
+    size_t arrlen = FIXNUM_BYTES * nargs;
+    uint8_t *arr = new uint8_t[arrlen];
+
     for (int i = 0; i < n; ++i) {
-        const byte_array &expected = tcases[i][2];
-        uint8_t arr[FIXNUM_BYTES];
-        memset(arr, 0, FIXNUM_BYTES);
-        size_t r = res->retrieve_into(arr, FIXNUM_BYTES, i);
-        ASSERT_EQ(r, FIXNUM_BYTES);
-
-        size_t expected_len = std::min(expected.size(), FIXNUM_BYTES);
-        EXPECT_TRUE(arrays_are_equal(expected.data(), expected_len, arr, FIXNUM_BYTES));
-    }
-}
-
-template< typename fixnum_impl >
-void check_result2(
-    const vector<binop_args> &tcases,
-    const fixnum_array<fixnum_impl> *rs,
-    const fixnum_array<fixnum_impl> *ss)
-{
-    static constexpr size_t FIXNUM_BYTES = fixnum_impl::FIXNUM_BYTES;
-    int n = (int) tcases.size();
-    EXPECT_EQ(rs->length(), n);
-    EXPECT_EQ(ss->length(), n);
-    for (int i = 0; i < n; ++i) {
-        static constexpr size_t arrlen = FIXNUM_BYTES * 2;
-        uint8_t arr[arrlen];
-        size_t b;
-
         const byte_array &expected = tcases[i][2];
 
         memset(arr, 0, arrlen);
-        b = rs->retrieve_into(arr, FIXNUM_BYTES, i);
-        ASSERT_EQ(b, FIXNUM_BYTES);
-        b = ss->retrieve_into(arr + FIXNUM_BYTES, FIXNUM_BYTES, i);
-        ASSERT_EQ(b, FIXNUM_BYTES);
+        uint8_t *dest = arr;
+        for (auto arg : args) {
+            size_t b = arg->retrieve_into(dest, FIXNUM_BYTES, i);
+            ASSERT_EQ(b, FIXNUM_BYTES);
+            dest += FIXNUM_BYTES;
+        }
 
         size_t expected_len = std::min(expected.size(), arrlen);
         EXPECT_TRUE(arrays_are_equal(expected.data(), expected_len, arr, arrlen)
                     << " at index i = " << i);
     }
+    delete[] arr;
+}
+
+template< typename fixnum_impl >
+void check_result(
+    const vector<binop_args> &tcases,
+    const fixnum_array<fixnum_impl> *arg)
+{
+    check_result(tcases, {arg});
 }
 
 TYPED_TEST(TypedPrimitives, add_cy) {
@@ -298,15 +295,14 @@ TYPED_TEST(TypedPrimitives, mul_wide) {
     fixnum_array *his, *los, *xs, *ys;
     vector<binop_args> tcases;
     set_args_from_tcases("tests/mul_wide", tcases, los, xs, ys, TRUNCATE);
-    // FIXME:
+    // FIXME: This should be set in set_args_from_tcases somehow.
     his = fixnum_array::create(tcases.size());
 
     auto fn = new mul_wide<fixnum_impl>();
     fixnum_array::map(fn, his, los, xs, ys);
     delete fn;
 
-    // FIXME:
-    check_result2(tcases, los, his);
+    check_result(tcases, {los, his});
     delete his;
     delete los;
     delete xs;
