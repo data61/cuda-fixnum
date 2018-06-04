@@ -21,6 +21,8 @@ class default_fixnum_impl {
             "Fixnum word size must divide fixnum bytes.");
     static_assert(std::is_integral< word_tp_ >::value,
             "word_tp must be integral.");
+    static constexpr int WORD_BITS = 8 * sizeof(_word_tp);
+
 public:
     typedef word_tp_ word_tp;
     static constexpr int FIXNUM_BYTES = FIXNUM_BYTES_;
@@ -68,7 +70,7 @@ public:
      * get/set the value from ptr corresponding to this thread (lane) in
      * slot number idx.
      */
-    __device__ static fixnum &get(fixnum *ptr, int idx) {
+    __device__ static fixnum &get(fixnum *ptr, int idx = 0) {
         int off = idx * slot_layout::WIDTH + slot_layout::laneIdx();
         return ptr[off];
     }
@@ -92,14 +94,20 @@ public:
         return resolve_borrows(r, br);
     }
 
+    __device__ static fixnum zero() {
+        return 0;
+    }
+
+    __device__ static fixnum one() {
+        return (slot_layout::laneIdx() == 0);
+    }
+
     __device__ static int incr_cy(fixnum &r) {
-        fixnum one = (slot_layout::laneIdx() == 0);
-        return add_cy(r, r, one);
+        return add_cy(r, r, one());
     }
 
     __device__ static int decr_br(fixnum &r) {
-        fixnum one = (slot_layout::laneIdx() == 0);
-        return sub_br(r, r, one);
+        return sub_br(r, r, one());
     }
 
 
@@ -190,7 +198,7 @@ public:
      * the ith digit of r is nonzero. In particular, result is zero
      * iff r is zero.
      */
-    __device__ static uint32_t nonzero(fixnum r) {
+    __device__ static uint32_t nonzero_mask(fixnum r) {
         return slot_layout::ballot(r != 0);
     }
 
@@ -202,7 +210,26 @@ public:
         fixnum r;
         int br = sub_br(r, x, y);
         // r != 0 iff x != y. If x != y, then br != 0 => x < y.
-        return nonzero(r) ? (br ? -1 : 1) : 0;
+        return nonzero_mask(r) ? (br ? -1 : 1) : 0;
+    }
+
+    /*
+     * Return the index of the most significant bit of x, or -1 if x is
+     * zero.
+     */
+    __device__ static int msb(fixnum x) {
+        // FIXME: Should be able to get this value from limits or numeric_limits
+        // or whatever.
+        enum { UINT32_BITS = 8 * sizeof(uint32_t) };
+        static_assert(UINT32_BITS == 32, "uint32_t isn't 32 bits");
+
+        uint32_t a = nonzero_mask(x);
+        // b is the index of the first non-zero word, or -1 if x is zero.
+        int b = UINT32_BITS - (clz(a) + 1);
+        if (b < 0) return b;
+        word_tp y = slot_layout::shfl(x, b);
+        int c = clz(y);
+        return WORD_BITS - (c + 1) + WORD_BITS * b;
     }
 
 private:
