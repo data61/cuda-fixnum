@@ -222,7 +222,7 @@ struct slot_layout
     }
 
     /*
-     * Like shfl_up but set bottom variable to zero.
+     * Like shfl_up but set bottom delta variables to zero.
      */
     template< typename T >
     static __device__ __forceinline__
@@ -230,11 +230,11 @@ struct slot_layout
     shfl_up0(T var, unsigned int delta) {
         T res = shfl_up(var, delta);
         //return res & -(T)(laneIdx() > 0);
-        return laneIdx() > 0 ? res : 0;
+        return laneIdx() < delta ? 0 : res;
     }
 
     /*
-     * Like shfl_down but set top variable to zero.
+     * Like shfl_down but set top delta variables to zero.
      */
     template< typename T >
     static __device__ __forceinline__
@@ -242,7 +242,7 @@ struct slot_layout
     shfl_down0(T var, unsigned int delta) {
         T res = shfl_down(var, delta);
         //return res & -(T)(laneIdx() < toplaneIdx());
-        return laneIdx() < toplaneIdx ? res : 0;
+        return laneIdx() > (toplaneIdx - delta) ? 0 : res;
     }
 
 private:
