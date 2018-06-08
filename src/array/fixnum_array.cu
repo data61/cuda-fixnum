@@ -166,7 +166,7 @@ dispatch(Func<fixnum_impl> *fn, int nelts, Args... args) {
     int idx = (blk_tid_offset + tid_in_blk) / fixnum_impl::SLOT_WIDTH;
 
     if (idx < nelts)
-        (*fn)(fixnum_impl::get(args, idx)...);
+        (*fn)(fixnum_impl::load(args, idx)...);
 }
 
 template< typename fixnum_impl >

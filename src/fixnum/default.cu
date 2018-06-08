@@ -21,12 +21,13 @@ class default_fixnum_impl {
             "Fixnum word size must divide fixnum bytes.");
     static_assert(std::is_integral< word_tp_ >::value,
             "word_tp must be integral.");
-    static constexpr int WORD_BITS = 8 * sizeof(_word_tp);
+    static constexpr int WORD_BITS = 8 * sizeof(word_tp_);
 
 public:
     typedef word_tp_ word_tp;
     static constexpr int FIXNUM_BYTES = FIXNUM_BYTES_;
     static constexpr int SLOT_WIDTH = FIXNUM_BYTES_ / sizeof(word_tp_);
+    // FIXME: slot_layout should not be exposed by this interface.
     typedef slot_layout< SLOT_WIDTH > slot_layout;
     typedef word_tp fixnum;
 
@@ -67,14 +68,33 @@ public:
     }
 
     /*
-     * get/set the value from ptr corresponding to this thread (lane) in
+     * load/set the value from ptr corresponding to this thread (lane) in
      * slot number idx.
      */
-    __device__ static fixnum &get(fixnum *ptr, int idx = 0) {
+    __device__ static fixnum &load(fixnum *ptr, int idx = 0) {
         int off = idx * slot_layout::WIDTH + slot_layout::laneIdx();
         return ptr[off];
     }
 
+    /*
+     * Return digit at index idx.
+     *
+     * FIXME: Not clear how to interpret this function with more exotic fixnum
+     * implementations such as RNS.
+     */
+    __device__ static fixnum get(fixnum var, int idx) {
+        return slot_layout::shfl(var, idx);
+    }
+
+    /*
+     * Return most significant digit.
+     *
+     * FIXME: Not clear how to interpret this function with more exotic fixnum
+     * implementations such as RNS.
+     */
+    __device__ static fixnum most_sig_dig(fixnum var) {
+        return slot_layout::shfl(var, slot_layout::toplaneIdx);
+    }
 
     /***********************
      * Arithmetic functions.
