@@ -13,7 +13,7 @@
  */
 
 enum {
-    ORDER  = -1,         /* least significant word first */
+    ORDER  = -1,         /* least significant byte first */
     SIZE   = 1,          /* one byte at a time */
     ENDIAN = 0,          /* native endianness */
     NAILS  = 0           /* how many nail bits */
@@ -97,6 +97,7 @@ get_invmod(const uint8_t N[], int nbytes)
 
     mpz_invmod(s, n, b);
 
+    // TODO: Replace this calculation with the simpler: ni = 2^DIGIT_BITS - s
     // s = -s
     mpz_neg(s, s);
     // s % 2^DIGIT_BITS
