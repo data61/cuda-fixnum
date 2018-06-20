@@ -21,8 +21,6 @@ class monty_mul : public managed {
     // inv_mod * mod = -1 % 2^DIGIT_BITS.
     word_tp  inv_mod;
 
-    void normalise(fixnum &x, int msw) const;
-
 public:
     typedef typename fixnum_impl::fixnum fixnum;
 
@@ -43,21 +41,24 @@ public:
 
     // TODO: Might be worth specialising monty_mul for this case, since one of
     // the operands is known.
-    __device__ void to_monty(fixnum &z) {
-        (*this)(z, z, fixnum_impl::get(R_sqr_mod));
+    __device__ void to_monty(fixnum &z, fixnum x) const {
+        (*this)(z, x, fixnum_impl::load(R_sqr_mod));
     }
 
     // TODO: Might be worth specialising monty_mul for this case, since one of
     // the operands is known.
-    __device__ void from_monty(fixnum &z) {
-        (*this)(z, z, fixnum_impl::one());
+    __device__ void from_monty(fixnum &z, fixnum x) const {
+        (*this)(z, x, fixnum_impl::one());
     }
+
+private:
+    __device__ void normalise(fixnum &x, int msb, fixnum m) const;
 };
 
 template< typename fixnum_impl >
 monty_mul<fixnum_impl>::monty_mul(const uint8_t *modulus, size_t modulus_bytes) {
     memcpy(mod, modulus, modulus_bytes);
-    get_R_and_Rsqr_mod(R_mod, R_sqr_mod, modulus, modulus_bytes);
+    get_R_and_Rsqr_mod<WIDTH>(R_mod, R_sqr_mod, modulus, modulus_bytes);
     inv_mod = get_invmod<word_tp>(modulus, modulus_bytes);
 }
 
@@ -72,8 +73,9 @@ template< typename fixnum_impl >
 __device__ void
 monty_mul<fixnum_impl>::operator()(fixnum &z, fixnum x, fixnum y) const
 {
-    int L = slot_layout::laneIdx();
+    typedef typename fixnum_impl::slot_layout slot_layout;
 
+    int L = slot_layout::laneIdx();
     const fixnum mod = fixnum_impl::load(this->mod);
     const word_tp tmp = x * fixnum_impl::get(y, 0) * inv_mod;
     word_tp cy = 0;
@@ -101,7 +103,7 @@ monty_mul<fixnum_impl>::operator()(fixnum &z, fixnum x, fixnum y) const
         umad_hi_cc(z, cy, y, xi, z);
     }
     // Resolve carries
-    word_tp msw = fixnum_impl::get(cy, T);
+    word_tp msw = fixnum_impl::most_sig_dig(cy);
     slot_layout::shfl_up0(cy, 1); // left shift by 1
     msw += fixnum_impl::add_cy(z, z, cy);
     assert(msw == !!msw); // msw = 0 or 1.
@@ -116,8 +118,8 @@ monty_mul<fixnum_impl>::operator()(fixnum &z, fixnum x, fixnum y) const
  */
 template< typename fixnum_impl >
 __device__ void
-monty_mul<fixnum_impl>::normalise(fixnum &x, int msw, fixnum m) const {
-    fixnum r, m;
+monty_mul<fixnum_impl>::normalise(fixnum &x, int msb, fixnum m) const {
+    fixnum r;
     int br;
 
     // br = 0 ==> x >= m

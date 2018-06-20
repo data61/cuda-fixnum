@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
+#include <cassert>
 #include <stdint.h>
 #include <gmp.h>
 #include "gmp_utils.h"
@@ -14,37 +15,40 @@
 
 enum {
     ORDER  = -1,         /* least significant byte first */
-    SIZE   = 1,          /* one byte at a time */
     ENDIAN = 0,          /* native endianness */
     NAILS  = 0           /* how many nail bits */
 };
 
 /*
- * Convert the array in of n bytes to an mpz.
+ * Convert the array in of n digit_t's to an mpz.
  */
+template<typename digit_t>
 static void
-intmod_to_mpz(mpz_t out, const uint8_t *in, int n)
+intmod_to_mpz(mpz_t out, const digit_t *in, int n)
 {
-    mpz_import(out, n, ORDER, SIZE, ENDIAN, NAILS, in);
+    mpz_import(out, n, ORDER, sizeof(digit_t), ENDIAN, NAILS, in);
 }
 
 /*
  * Convert the mpz in to an array.
  *
- * The array out must have nbytes bytes; unused higher order bytes
+ * The array out must have nelts digit_t's; unused higher order digits
  * are set to zero.
  */
+template<typename digit_t>
 static void
-intmod_from_mpz(uint8_t out[], const mpz_t in, size_t nbytes)
+intmod_from_mpz(digit_t out[], const mpz_t in, size_t nelts)
 {
-    if (mpz_sizeinbase(in, 8) > nbytes) {
+    static constexpr int DIGIT_BITS = sizeof(digit_t) * 8;
+    if (mpz_sizeinbase(in, DIGIT_BITS) > nelts) {
         // FIXME: Handle this error more gracefully.
         fprintf(stderr, "Failed to convert intmod\n");
         abort();
     }
     size_t cnt = 0;
-    (void) mpz_export(out, &cnt, ORDER, SIZE, ENDIAN, NAILS, in);
-    memset(out + cnt, 0, nbytes - cnt);
+    (void) mpz_export(out, &cnt, ORDER, sizeof(digit_t), ENDIAN, NAILS, in);
+    for (; cnt < nelts; ++cnt)
+        out[cnt] = (digit_t)0UL;
 }
 
 /*
@@ -80,7 +84,7 @@ get_invmod(const uint8_t N[], int nbytes)
 {
     // This assertion checks that the result of mpz_get_ui() is compatible with
     // the desired digit_t.
-    static_assert(sizeof(digit_t) <= sizeof(unsigned long));
+    static_assert(sizeof(digit_t) <= sizeof(unsigned long), "digit type too small");
     static constexpr int DIGIT_BITS = 8 * sizeof(digit_t);
     mpz_t s, n, b;
     unsigned long ni;
@@ -128,8 +132,9 @@ get_invmod(const uint8_t N[], int nbytes)
  *
  * These values are used for Montgomery arithmetic; see 'modexp.cu'.
  */
+template< int NDIGITS, typename digit_t >
 void
-get_R_and_Rsqr_mod(uint8_t R_mod[], uint8_t R_sqr_mod[], const uint8_t mod[], int nbytes)
+get_R_and_Rsqr_mod(digit_t R_mod[NDIGITS], digit_t R_sqr_mod[NDIGITS], const uint8_t mod[], int nbytes)
 {
     mpz_t n, r, r_mod;
 
@@ -144,16 +149,15 @@ get_R_and_Rsqr_mod(uint8_t R_mod[], uint8_t R_sqr_mod[], const uint8_t mod[], in
     // r_modn = r % n
     mpz_init(r_mod);
     mpz_mod(r_mod, r, n);
-    intmod_from_mpz(R_mod, r_mod, nbytes);
+    intmod_from_mpz(R_mod, r_mod, NDIGITS);
 
     // r = r^2
     mpz_mul_2exp(r, r, nbytes * 8);
     // r_modn = r^2 % n
     mpz_mod(r_mod, r, n);
-    intmod_from_mpz(R_sqr_mod, r_mod, nbytes);
+    intmod_from_mpz(R_sqr_mod, r_mod, NDIGITS);
 
     mpz_clear(r_mod);
     mpz_clear(n);
     mpz_clear(r);
 }
-

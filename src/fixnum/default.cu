@@ -71,6 +71,11 @@ public:
      * load/set the value from ptr corresponding to this thread (lane) in
      * slot number idx.
      */
+    __device__ static fixnum load(const fixnum *ptr, int idx = 0) {
+        int off = idx * slot_layout::WIDTH + slot_layout::laneIdx();
+        return ptr[off];
+    }
+
     __device__ static fixnum &load(fixnum *ptr, int idx = 0) {
         int off = idx * slot_layout::WIDTH + slot_layout::laneIdx();
         return ptr[off];
@@ -273,9 +278,9 @@ private:
         // NB: There is no way to unify these two expressions to remove the
         // conditional. The conditional should be optimised away though, since
         // WIDTH is a compile-time constant.
-        cy_hi = (slot_layout::WIDTH == WARP_SIZE) // detect hi overflow
+        cy_hi = (slot_layout::WIDTH == WARPSIZE) // detect hi overflow
             ? (allcarries < g)
-            : ((allcarries >> WIDTH) & 1);
+            : ((allcarries >> slot_layout::WIDTH) & 1);
         allcarries = (allcarries ^ p) | (g << 1); // get effective carries
         return (allcarries >> L) & 1;
     }

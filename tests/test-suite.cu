@@ -13,7 +13,7 @@
 
 #include "array/fixnum_array.h"
 #include "fixnum/default.cu"
-#include "functions/square.cu"
+#include "functions/monty_mul.cu"
 
 using namespace std;
 
@@ -339,6 +339,47 @@ TYPED_TEST(TypedPrimitives, mul_wide) {
     delete ys;
 }
 
+
+template< typename fixnum_impl >
+struct to_monty : public managed {
+    typedef typename fixnum_impl::fixnum fixnum;
+    const monty_mul<fixnum_impl> *mul;
+
+    to_monty(const uint8_t *modulus, size_t nbytes)
+        : mul(new monty_mul<fixnum_impl>(modulus, nbytes)) { }
+
+    ~to_monty() { delete mul; }
+
+    __device__ void operator()(fixnum &z, fixnum x) {
+        mul->to_monty(z, x);
+    }
+};
+
+TEST(Montgomery, conversion) {
+    typedef default_fixnum_impl<8, uint32_t> fixnum_impl;
+    typedef fixnum_array<fixnum_impl> fixnum_array;
+
+    fixnum_array *res, *xs;
+
+    int n = 13;
+    res = fixnum_array::create(n);
+    xs = fixnum_array::create(n, 7);
+
+    // 23 + 39*256 = 10007 = nextprime(1e4)
+    static constexpr int modbytes = 8;
+    uint8_t modulus[modbytes] = { 23, 39, 0, 0, 0, 0, 0, 0 };
+
+    // FIXME: The use of to_monty is awkward; should really consider making a
+    // first-class Monty representation.
+    auto fn = new to_monty<fixnum_impl>(modulus, modbytes);
+    fixnum_array::map(fn, res, xs);
+    delete fn;
+
+    // check result.
+
+    delete res;
+    delete xs;
+}
 
 int main(int argc, char *argv[])
 {
