@@ -102,6 +102,8 @@ public:
 
     // TODO: Handle carry in
     __device__ static int add_cy(fixnum &r, fixnum a, fixnum b) {
+        // FIXME: Can't call std::numeric_limits<fixnum>::max() on device.
+        //static constexpr fixnum FIXNUM_MAX = std::numeric_limits<fixnum>::max();
         static constexpr fixnum FIXNUM_MAX = ~(fixnum)0;
         int cy, cy_hi;
         r = a + b;
@@ -262,19 +264,18 @@ public:
 
 private:
     __device__ static fixnum effective_carries(int &cy_hi, fixnum propagate, int cy) {
-        // FIXME: Can't call std::numeric_limits<fixnum>::max() on device.
-        //static constexpr fixnum FIXNUM_MAX = std::numeric_limits<fixnum>::max();
-        static constexpr int WIDTH = slot_layout::WIDTH;
         int L = slot_layout::laneIdx();
         uint32_t allcarries, p, g;
 
         g = slot_layout::ballot(cy);              // carry generate
         p = slot_layout::ballot(propagate);       // carry propagate
         allcarries = (p | g) + g;                 // propagate all carries
-        // FIXME: Unify these two expressions to remove the conditional;
-        // the simple expression is not correct when WIDTH != warpSize
-        //cy_hi = allcarries < g;                   // detect final overflow
-        cy_hi = (WIDTH == 32) ? (allcarries < g) : ((allcarries >> WIDTH) & 1);
+        // NB: There is no way to unify these two expressions to remove the
+        // conditional. The conditional should be optimised away though, since
+        // WIDTH is a compile-time constant.
+        cy_hi = (slot_layout::WIDTH == WARP_SIZE) // detect hi overflow
+            ? (allcarries < g)
+            : ((allcarries >> WIDTH) & 1);
         allcarries = (allcarries ^ p) | (g << 1); // get effective carries
         return (allcarries >> L) & 1;
     }
