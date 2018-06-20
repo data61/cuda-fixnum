@@ -102,18 +102,24 @@ public:
 
     // TODO: Handle carry in
     __device__ static int add_cy(fixnum &r, fixnum a, fixnum b) {
-        int cy;
+        static constexpr fixnum FIXNUM_MAX = ~(fixnum)0;
+        int cy, cy_hi;
         r = a + b;
         cy = r < a;
-        return resolve_carries(r, cy);
+        // r propagates carries iff r = FIXNUM_MAX
+        r += effective_carries(cy_hi, r == FIXNUM_MAX, cy);
+        return cy_hi;
     }
 
     // TODO: Handle borrow in
     __device__ static int sub_br(fixnum &r, fixnum a, fixnum b) {
-        int br;
+        static constexpr fixnum FIXNUM_MIN = 0;
+        int br, br_hi;
         r = a - b;
         br = r > a;
-        return resolve_borrows(r, br);
+        // r propagates borrows iff r = FIXNUM_MIN
+        r -= effective_carries(br_hi, r == FIXNUM_MIN, br);
+        return br_hi;
     }
 
     __device__ static fixnum zero() {
@@ -255,48 +261,21 @@ public:
     }
 
 private:
-    __device__ static int resolve_carries(fixnum &r, int cy) {
+    __device__ static fixnum effective_carries(int &cy_hi, fixnum propagate, int cy) {
         // FIXME: Can't call std::numeric_limits<fixnum>::max() on device.
         //static constexpr fixnum FIXNUM_MAX = std::numeric_limits<fixnum>::max();
-        static constexpr fixnum FIXNUM_MAX = ~(fixnum)0;
         static constexpr int WIDTH = slot_layout::WIDTH;
         int L = slot_layout::laneIdx();
         uint32_t allcarries, p, g;
-        int cy_hi;
 
         g = slot_layout::ballot(cy);              // carry generate
-        p = slot_layout::ballot(r == FIXNUM_MAX); // carry propagate
+        p = slot_layout::ballot(propagate);       // carry propagate
         allcarries = (p | g) + g;                 // propagate all carries
         // FIXME: Unify these two expressions to remove the conditional;
         // the simple expression is not correct when WIDTH != warpSize
         //cy_hi = allcarries < g;                   // detect final overflow
         cy_hi = (WIDTH == 32) ? (allcarries < g) : ((allcarries >> WIDTH) & 1);
         allcarries = (allcarries ^ p) | (g << 1); // get effective carries
-        r += (allcarries >> L) & 1;
-
-        // return highest carry
-        return cy_hi;
-    }
-
-    __device__ static int resolve_borrows(fixnum &r, int cy) {
-        // FIXME: Use std::numeric_limits<fixnum>::min
-        static constexpr fixnum FIXNUM_MIN = 0;
-        static constexpr int WIDTH = slot_layout::WIDTH;
-        int L = slot_layout::laneIdx();
-        uint32_t allcarries, p, g;
-        int cy_hi;
-
-        g = slot_layout::ballot(cy);              // carry generate
-        p = slot_layout::ballot(r == FIXNUM_MIN); // carry propagate
-        allcarries = (p | g) + g;                 // propagate all carries
-        // FIXME: Unify these two expressions to remove the conditional;
-        // the simple expression is not correct when WIDTH != warpSize
-        //cy_hi = allcarries < g;                   // detect final overflow
-        cy_hi = (WIDTH == 32) ? (allcarries < g) : ((allcarries >> WIDTH) & 1);
-        allcarries = (allcarries ^ p) | (g << 1); // get effective carries
-        r -= (allcarries >> L) & 1;
-
-        // return highest carry
-        return cy_hi;
+        return (allcarries >> L) & 1;
     }
 };
