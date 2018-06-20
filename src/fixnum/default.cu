@@ -100,6 +100,7 @@ public:
      * Arithmetic functions.
      */
 
+    // TODO: Handle carry in
     __device__ static int add_cy(fixnum &r, fixnum a, fixnum b) {
         int cy;
         r = a + b;
@@ -107,6 +108,7 @@ public:
         return resolve_carries(r, cy);
     }
 
+    // TODO: Handle borrow in
     __device__ static int sub_br(fixnum &r, fixnum a, fixnum b) {
         int br;
         r = a - b;
@@ -277,21 +279,21 @@ private:
     }
 
     __device__ static int resolve_borrows(fixnum &r, int cy) {
-        // FIXME: This is at best a half-baked attempt to adapt
-        // the carry propagation code above to the case of
-        // subtraction.
         // FIXME: Use std::numeric_limits<fixnum>::min
         static constexpr fixnum FIXNUM_MIN = 0;
+        static constexpr int WIDTH = slot_layout::WIDTH;
         int L = slot_layout::laneIdx();
         uint32_t allcarries, p, g;
         int cy_hi;
 
-        g = ~slot_layout::ballot(cy);             // carry generate
-        p = ~slot_layout::ballot(r == FIXNUM_MIN);// carry propagate
-        allcarries = (p & g) - g;                 // propagate all carries
-        // FIXME: This is not correct when WIDTH != warpSize
-        cy_hi = allcarries > g;                   // detect final underflow
-        allcarries = (allcarries ^ p) | (g >> 1); // get effective carries
+        g = slot_layout::ballot(cy);              // carry generate
+        p = slot_layout::ballot(r == FIXNUM_MIN); // carry propagate
+        allcarries = (p | g) + g;                 // propagate all carries
+        // FIXME: Unify these two expressions to remove the conditional;
+        // the simple expression is not correct when WIDTH != warpSize
+        //cy_hi = allcarries < g;                   // detect final overflow
+        cy_hi = (WIDTH == 32) ? (allcarries < g) : ((allcarries >> WIDTH) & 1);
+        allcarries = (allcarries ^ p) | (g << 1); // get effective carries
         r -= (allcarries >> L) & 1;
 
         // return highest carry

@@ -43,8 +43,8 @@ def mktests(fname, arg):
 
 def sub_br(x, y):
     if x >= y:
-        return x - y, 0
-    return y - x, 1
+        return x - y
+    return (x - y) % 2**2048
 
 def generate_interesting_numbers(max_bits=2048, digit_bits=32):
     nums = list(range(12))

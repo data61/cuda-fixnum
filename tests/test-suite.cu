@@ -103,15 +103,6 @@ arrays_are_equal(
     return ::testing::AssertionSuccess();
 }
 
-template< typename fixnum_impl >
-struct add_cy : public managed {
-    typedef typename fixnum_impl::fixnum fixnum;
-
-    __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
-        fixnum_impl::add_cy(r, a, b);
-    }
-};
-
 
 template< typename fixnum_impl_ >
 struct TypedPrimitives : public ::testing::Test {
@@ -232,6 +223,15 @@ void check_result(
     check_result(tcases, {arg});
 }
 
+template< typename fixnum_impl >
+struct add_cy : public managed {
+    typedef typename fixnum_impl::fixnum fixnum;
+
+    __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
+        fixnum_impl::add_cy(r, a, b);
+    }
+};
+
 TYPED_TEST(TypedPrimitives, add_cy) {
     typedef typename TestFixture::fixnum_impl fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
@@ -250,6 +250,36 @@ TYPED_TEST(TypedPrimitives, add_cy) {
     delete xs;
     delete ys;
 }
+
+
+template< typename fixnum_impl >
+struct sub_br : public managed {
+    typedef typename fixnum_impl::fixnum fixnum;
+
+    __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
+        fixnum_impl::sub_br(r, a, b);
+    }
+};
+
+TYPED_TEST(TypedPrimitives, sub_br) {
+    typedef typename TestFixture::fixnum_impl fixnum_impl;
+    typedef fixnum_array<fixnum_impl> fixnum_array;
+
+    fixnum_array *res, *xs, *ys;
+    vector<binop_args> tcases;
+    set_args_from_tcases("tests/sub_br", tcases, res, xs, ys);
+
+    auto fn = new sub_br<fixnum_impl>();
+    fixnum_array::map(fn, res, xs, ys);
+    delete fn;
+
+    // FIXME: check for borrows
+    check_result(tcases, res);
+    delete res;
+    delete xs;
+    delete ys;
+}
+
 
 template< typename fixnum_impl >
 struct mul_lo : public managed {
