@@ -345,13 +345,24 @@ struct to_monty : public managed {
     typedef typename fixnum_impl::fixnum fixnum;
     const monty_mul<fixnum_impl> *mul;
 
-    to_monty(const uint8_t *modulus, size_t nbytes)
-        : mul(new monty_mul<fixnum_impl>(modulus, nbytes)) { }
-
-    ~to_monty() { delete mul; }
+    to_monty(const monty_mul<fixnum_impl> *mul_)
+        : mul(mul_) { }
 
     __device__ void operator()(fixnum &z, fixnum x) {
         mul->to_monty(z, x);
+    }
+};
+
+template< typename fixnum_impl >
+struct from_monty : public managed {
+    typedef typename fixnum_impl::fixnum fixnum;
+    const monty_mul<fixnum_impl> *mul;
+
+    from_monty(const monty_mul<fixnum_impl> *mul_)
+        : mul(mul_) { }
+
+    __device__ void operator()(fixnum &z, fixnum x) {
+        mul->from_monty(z, x);
     }
 };
 
@@ -359,26 +370,60 @@ TEST(Montgomery, conversion) {
     typedef default_fixnum_impl<8, uint32_t> fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
 
-    fixnum_array *res, *xs;
+    fixnum_array *res, *xs, *ys;
 
     int n = 13;
     res = fixnum_array::create(n);
     xs = fixnum_array::create(n, 7);
+    ys = fixnum_array::create(n);
 
     // 23 + 39*256 = 10007 = nextprime(1e4)
     static constexpr int modbytes = 8;
     uint8_t modulus[modbytes] = { 23, 39, 0, 0, 0, 0, 0, 0 };
 
+    auto mul = new monty_mul<fixnum_impl>(modulus, modbytes);
+
     // FIXME: The use of to_monty is awkward; should really consider making a
     // first-class Monty representation.
-    auto fn = new to_monty<fixnum_impl>(modulus, modbytes);
-    fixnum_array::map(fn, res, xs);
-    delete fn;
+    auto to = new to_monty<fixnum_impl>(mul);
+    fixnum_array::map(to, res, xs);
+    delete to;
+
+    fixnum_array::map(mul, res, res);
+
+    auto from = new from_monty<fixnum_impl>(mul);
+    fixnum_array::map(from, ys, res);
+    delete from;
 
     // check result.
+    static constexpr int FIXNUM_BYTES = fixnum_impl::FIXNUM_BYTES;
+    size_t arrlen = FIXNUM_BYTES;
+    uint8_t *arr1 = new uint8_t[arrlen];
+    uint8_t *arr2 = new uint8_t[arrlen];
 
+    for (int i = 0; i < n; ++i) {
+        size_t b;
+        memset(arr1, 0, arrlen);
+        memset(arr2, 0, arrlen);
+        b = xs->retrieve_into(arr1, FIXNUM_BYTES, i);
+        ASSERT_EQ(b, FIXNUM_BYTES);
+        b = ys->retrieve_into(arr2, FIXNUM_BYTES, i);
+        ASSERT_EQ(b, FIXNUM_BYTES);
+
+        for (int j = 0; j < arrlen; ++j)
+            arr1[j] *= arr1[j];
+
+        EXPECT_TRUE(arrays_are_equal(arr1, arrlen, arr2, arrlen)
+                    << " at index i = " << i);
+    }
+    delete[] arr1;
+    delete[] arr2;
+
+
+    delete mul;
     delete res;
     delete xs;
+    delete ys;
 }
 
 int main(int argc, char *argv[])
