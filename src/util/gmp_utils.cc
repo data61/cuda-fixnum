@@ -40,7 +40,7 @@ static void
 intmod_from_mpz(digit_t out[], const mpz_t in, size_t nelts)
 {
     static constexpr int DIGIT_BITS = sizeof(digit_t) * 8;
-    if (mpz_sizeinbase(in, DIGIT_BITS) > nelts) {
+    if (mpz_sizeinbase(in, 2) > nelts * DIGIT_BITS) {
         // FIXME: Handle this error more gracefully.
         fprintf(stderr, "Failed to convert intmod\n");
         abort();
