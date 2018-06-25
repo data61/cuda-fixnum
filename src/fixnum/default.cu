@@ -21,10 +21,10 @@ class default_fixnum_impl {
             "Fixnum word size must divide fixnum bytes.");
     static_assert(std::is_integral< word_tp_ >::value,
             "word_tp must be integral.");
-    static constexpr int WORD_BITS = 8 * sizeof(word_tp_);
 
 public:
     typedef word_tp_ word_tp;
+    static constexpr int WORD_BITS = 8 * sizeof(word_tp_);
     static constexpr int FIXNUM_BYTES = FIXNUM_BYTES_;
     static constexpr int SLOT_WIDTH = FIXNUM_BYTES_ / sizeof(word_tp_);
     // FIXME: slot_layout should not be exposed by this interface.

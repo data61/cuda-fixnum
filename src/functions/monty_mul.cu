@@ -51,15 +51,60 @@ public:
         (*this)(z, x, fixnum_impl::one());
     }
 
+    /*
+     * Return the Montgomery image of one.
+     */
+    __device__ fixnum one() const {
+        return fixnum_impl::load(R_mod);
+    }
+
 private:
     __device__ void normalise(fixnum &x, int msb, fixnum m) const;
 };
 
+
+// TODO: These two functions should be in a utilities file. Also, they are
+// specific to the default classical number representation.
+
+/*
+ * Return 1 if x is even, 0 if it is odd.
+ */
+template<typename digit_t>
+int
+is_even(digit_t x) { return !(x & 1); }
+
+/*
+ * Return 1 if the n digit number x is even or equal to one (1), 0
+ * otherwise (ie. odd > 1).
+ */
+template<typename digit_t>
+int
+is_even_or_one(const digit_t *x, int n)
+{
+    // x is 0 or even:
+    if (n == 0 || is_even(x[0])) return 1;
+    // x is odd > 1
+    if (x[0] > 1) return 0;
+    // x = 1 iff we don't find a non-zero word
+    int i = 1;
+    for (; i < n; ++i)
+        if (x[i]) break;
+    return i == n;
+}
+
 template< typename fixnum_impl >
-monty_mul<fixnum_impl>::monty_mul(const uint8_t *modulus, size_t modulus_bytes) {
-    memcpy(mod, modulus, modulus_bytes);
-    get_R_and_Rsqr_mod<WIDTH>(R_mod, R_sqr_mod, modulus, modulus_bytes);
-    inv_mod = get_invmod<word_tp>(modulus, modulus_bytes);
+monty_mul<fixnum_impl>::monty_mul(const uint8_t *modulus, size_t modulus_bytes)
+{
+    // FIXME: It should probably be an error to provide a modulus that's too
+    // big.
+    size_t nbytes = std::min((size_t)fixnum_impl::FIXNUM_BYTES, modulus_bytes);
+    // mod must be odd > 1 in order to calculate R^-1 mod "mod".
+    // FIXME: Handle this error properly
+    assert( ! is_even_or_one(modulus, nbytes));
+    memset(mod, 0, sizeof(word_tp) * WIDTH);
+    memcpy(mod, modulus, nbytes);
+    get_R_and_Rsqr_mod<WIDTH>(R_mod, R_sqr_mod, modulus, nbytes);
+    inv_mod = get_invmod(modulus, nbytes, fixnum_impl::WORD_BITS);
 }
 
 /*

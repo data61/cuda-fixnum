@@ -14,6 +14,7 @@
 #include "array/fixnum_array.h"
 #include "fixnum/default.cu"
 #include "functions/monty_mul.cu"
+#include "functions/modexp.cu"
 
 using namespace std;
 
@@ -366,8 +367,9 @@ struct from_monty : public managed {
     }
 };
 
-TEST(Montgomery, conversion) {
-    typedef default_fixnum_impl<8, uint32_t> fixnum_impl;
+TYPED_TEST(TypedPrimitives, monty_conversion)
+{
+    typedef typename TestFixture::fixnum_impl fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
 
     fixnum_array *res, *xs, *ys;
@@ -379,7 +381,7 @@ TEST(Montgomery, conversion) {
 
     // 23 + 39*256 = 10007 = nextprime(1e4)
     static constexpr int modbytes = 8;
-    uint8_t modulus[modbytes] = { 23, 39, 0, 0, 0, 0, 0, 0 };
+    uint8_t modulus[modbytes] = { 23, 0, 0, 0, 0, 0, 0, 0 };
 
     auto mul = new monty_mul<fixnum_impl>(modulus, modbytes);
 
@@ -389,6 +391,7 @@ TEST(Montgomery, conversion) {
     fixnum_array::map(to, res, xs);
     delete to;
 
+    // Square
     fixnum_array::map(mul, res, res);
 
     auto from = new from_monty<fixnum_impl>(mul);
@@ -397,9 +400,9 @@ TEST(Montgomery, conversion) {
 
     // check result.
     static constexpr int FIXNUM_BYTES = fixnum_impl::FIXNUM_BYTES;
-    size_t arrlen = FIXNUM_BYTES;
-    uint8_t *arr1 = new uint8_t[arrlen];
-    uint8_t *arr2 = new uint8_t[arrlen];
+    static constexpr size_t arrlen = FIXNUM_BYTES;
+    uint8_t arr1[arrlen];
+    uint8_t arr2[arrlen];
 
     for (int i = 0; i < n; ++i) {
         size_t b;
@@ -410,20 +413,71 @@ TEST(Montgomery, conversion) {
         b = ys->retrieve_into(arr2, FIXNUM_BYTES, i);
         ASSERT_EQ(b, FIXNUM_BYTES);
 
-        for (int j = 0; j < arrlen; ++j)
-            arr1[j] *= arr1[j];
+        for (unsigned j = 0; j < arrlen; ++j) {
+            unsigned int t = arr1[j];
+            t = (t * t) % 23;
+            arr1[j] = t;
+        }
 
         EXPECT_TRUE(arrays_are_equal(arr1, arrlen, arr2, arrlen)
                     << " at index i = " << i);
     }
-    delete[] arr1;
-    delete[] arr2;
-
 
     delete mul;
     delete res;
     delete xs;
     delete ys;
+}
+
+TYPED_TEST(TypedPrimitives, modexp)
+{
+    typedef typename TestFixture::fixnum_impl fixnum_impl;
+    typedef fixnum_array<fixnum_impl> fixnum_array;
+
+    fixnum_array *res, *xs;
+
+    int n = 13;
+    res = fixnum_array::create(n);
+    xs = fixnum_array::create(n, 7);
+
+    // 23 + 39*256 = 10007 = nextprime(1e4)
+    static constexpr int modbytes = 8;
+    uint8_t mod[modbytes] = { 23, 0, 0, 0, 0, 0, 0, 0 };
+    uint8_t exp[modbytes] = {  4, 0, 0, 0, 0, 0, 0, 0 };
+
+    auto fn = new modexp<fixnum_impl>(mod, modbytes, exp, modbytes);
+    fixnum_array::map(fn, res, xs);
+
+    // check result.
+    static constexpr int FIXNUM_BYTES = fixnum_impl::FIXNUM_BYTES;
+    static constexpr size_t arrlen = FIXNUM_BYTES;
+    uint8_t arr1[arrlen];
+    uint8_t arr2[arrlen];
+
+    for (int i = 0; i < n; ++i) {
+        size_t b;
+        memset(arr1, 0, arrlen);
+        memset(arr2, 0, arrlen);
+        b = xs->retrieve_into(arr1, FIXNUM_BYTES, i);
+        ASSERT_EQ(b, FIXNUM_BYTES);
+        b = res->retrieve_into(arr2, FIXNUM_BYTES, i);
+        ASSERT_EQ(b, FIXNUM_BYTES);
+
+        for (unsigned j = 0; j < arrlen; ++j) {
+            unsigned int t = arr1[j];
+            t = (t * t) % 23;
+            t = (t * t) % 23;
+            //arr1[j] = 1 * !j;
+            arr1[j] = t;
+        }
+
+        EXPECT_TRUE(arrays_are_equal(arr1, arrlen, arr2, arrlen)
+                    << " at index i = " << i);
+    }
+
+    delete fn;
+    delete res;
+    delete xs;
 }
 
 int main(int argc, char *argv[])

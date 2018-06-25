@@ -71,55 +71,55 @@ mpz_invmod(mpz_t s, const mpz_t x, const mpz_t m)
 }
 
 /*
- * Given N an array of width digits, return ni satisfying ni * N = -1
- * (mod 2^DIGIT_BITS).
+ * Given N an array of nelts elements, return ni satisfying ni * N = -1
+ * (mod 2^modbits).
  *
  * Assumes N is odd (this is not checked).
- *
- * TODO: Currently assumes that digit_t is unsigned; can we relax this?
+ * TODO: Mark where this assumption is used in the function (i.e. N must be
+ * coprime to 2 for gcd).
  */
 template< typename digit_t >
-digit_t
-get_invmod(const uint8_t N[], int nbytes)
+unsigned long
+get_invmod(const digit_t N[], int nelts, int modbits)
 {
-    // This assertion checks that the result of mpz_get_ui() is compatible with
-    // the desired digit_t.
-    static_assert(sizeof(digit_t) <= sizeof(unsigned long), "digit type too small");
-    static constexpr int DIGIT_BITS = 8 * sizeof(digit_t);
+    // This checks that the result of mpz_get_ui() is compatible with
+    // the desired modbits.
+    // FIXME: handle error more appropriately
+    assert(modbits > 0 && (unsigned)modbits <= 8 * sizeof(unsigned long));
     mpz_t s, n, b;
     unsigned long ni;
 
     mpz_init(s);
 
-    // b = 2^DIGIT_BITS
+    // b = 2^modbits
     mpz_init_set_ui(b, 1);
-    mpz_mul_2exp(b, b, DIGIT_BITS);
+    mpz_mul_2exp(b, b, modbits);
 
     // n = N
     mpz_init(n);
-    intmod_to_mpz(n, N, nbytes);
+    intmod_to_mpz(n, N, nelts);
 
     mpz_invmod(s, n, b);
 
-    // TODO: Replace this calculation with the simpler: ni = 2^DIGIT_BITS - s
+    // TODO: Replace this calculation with the simpler: ni = 2^modbits - s
     // s = -s
     mpz_neg(s, s);
-    // s % 2^DIGIT_BITS
-    mpz_fdiv_r_2exp(s, s, DIGIT_BITS);
+    // s % 2^modbits
+    mpz_fdiv_r_2exp(s, s, modbits);
     // ni = (unsigned) s
     ni = mpz_get_ui(s);
 
-    // Hence n * ni = -1 (mod 2^DIGIT_BITS)
+    // Hence n * ni = -1 (mod 2^modbits)
     mpz_mul_ui(n, n, ni);
     mpz_add_ui(n, n, 1);
-    mpz_fdiv_r_2exp(n, n, DIGIT_BITS);
+    mpz_fdiv_r_2exp(n, n, modbits);
     assert(mpz_cmp_ui(n, 0) == 0);
 
     mpz_clear(n);
     mpz_clear(b);
     mpz_clear(s);
 
-    return (digit_t)ni;
+    return ni;
 }
 
 /*
@@ -128,7 +128,7 @@ get_invmod(const uint8_t N[], int nbytes)
  *   R_mod = 2^NBITS (mod "mod")
  *   R_sqr_mod = R_mod^2 (mod "mod")
  *
- * where NBITS := width * DIGIT_BITS = nbytes * 8.
+ * where NBITS := 8 * sizeof(digit_t) * NDIGITS.
  *
  * These values are used for Montgomery arithmetic; see 'modexp.cu'.
  */
@@ -137,14 +137,18 @@ void
 get_R_and_Rsqr_mod(digit_t R_mod[NDIGITS], digit_t R_sqr_mod[NDIGITS], const uint8_t mod[], int nbytes)
 {
     mpz_t n, r, r_mod;
+    // TODO: Double-check that this is the right value for R. If mod is small,
+    // then we might be able to choose R with lots of zeros in it, which might
+    // be advantageous.
+    static constexpr mp_bitcnt_t R_BITS = 8 * sizeof(digit_t) * NDIGITS;
 
     // n = N
     mpz_init(n);
     intmod_to_mpz(n, mod, nbytes);
 
-    // r = 2^(width * DIGIT_BITS)
+    // r = 2^R_BITS
     mpz_init_set_ui(r, 1);
-    mpz_mul_2exp(r, r, nbytes * 8);
+    mpz_mul_2exp(r, r, R_BITS);
 
     // r_modn = r % n
     mpz_init(r_mod);
@@ -152,7 +156,7 @@ get_R_and_Rsqr_mod(digit_t R_mod[NDIGITS], digit_t R_sqr_mod[NDIGITS], const uin
     intmod_from_mpz(R_mod, r_mod, NDIGITS);
 
     // r = r^2
-    mpz_mul_2exp(r, r, nbytes * 8);
+    mpz_mul_2exp(r, r, R_BITS);
     // r_modn = r^2 % n
     mpz_mod(r_mod, r, n);
     intmod_from_mpz(R_sqr_mod, r_mod, NDIGITS);
