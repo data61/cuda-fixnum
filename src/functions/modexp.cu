@@ -32,6 +32,8 @@ class modexp : public managed {
     //   print(b, ": ", m))
     //
     // NB: The best window size exceeds MAX_WINDOW_BITS=8 when b ~ 18700 bits.
+    // FIXME: The formula above differs slightly from MCA, Section 2.6.2. Work out
+    // which is correct.
 
     static constexpr int WINDOW_BITS = 5, MAX_WINDOW_BITS = 8;
     static constexpr int WINDOW_MAX = (1U << WINDOW_BITS);
@@ -52,7 +54,7 @@ class modexp : public managed {
 
     // TODO: Generalise modexp so that it can work with any modular
     // multiplication algorithm.
-    monty_mul<fixnum_impl> *monty;
+    const monty_mul<fixnum_impl> monty;
 
     static void
     get_window_decomp(
@@ -62,12 +64,15 @@ class modexp : public managed {
 public:
     typedef typename fixnum_impl::fixnum fixnum;
 
+    /*
+     * NB: It is assumed that the caller has reduced exp and mod using knowledge
+     * of their properties (e.g. reducing exp modulo phi(mod), CRT, etc.).
+     */
     modexp(const uint8_t *mod, size_t modbytes, const uint8_t *exp, size_t expbytes);
 
     ~modexp() {
         if (exp_decomp_len)
             cuda_free(exp_decomp);
-        delete monty;
     }
 
     __device__ void operator()(fixnum &z, fixnum x) const;
@@ -201,13 +206,10 @@ template< typename fixnum_impl >
 modexp<fixnum_impl>::modexp(
     const uint8_t *mod, size_t modbytes,
     const uint8_t *exp_, size_t expbytes)
-    : monty(new monty_mul<fixnum_impl>(mod, modbytes))
+    : monty(mod, modbytes)
 {
     ulong *exp;
     int expdigits;
-
-    // TODO: Fermat's little theorem says a^phi(n) = 1 (mod n), so we should
-    // reduce exp modulo phi(mod).
 
     expdigits = iceil(expbytes, sizeof(ulong));
     exp = new ulong[expdigits];
@@ -233,17 +235,17 @@ modexp<fixnum_impl>::operator()(fixnum &z, fixnum x) const
 {
     /* G[t] = z^(2t + 1) t >= 0 (odd powers of z) */
     fixnum G[WINDOW_MAX / 2];
-    monty->to_monty(z, x);
+    monty.to_monty(z, x);
     G[0] = z;
     if (WINDOW_BITS > 1) {
-        (*monty)(z, z);
+        monty(z, z);
         for (int t = 1; t < WINDOW_MAX / 2; ++t) {
             G[t] = G[t - 1];
-            (*monty)(G[t], G[t], z);
+            monty(G[t], G[t], z);
         }
     }
 
-    z = monty->one();
+    z = monty.one();
     const int decomp_len = exp_decomp_len;
     const uint16_t *decomp = exp_decomp;
     for (int i = 0; i < decomp_len; ++i) {
@@ -251,9 +253,9 @@ modexp<fixnum_impl>::operator()(fixnum &z, fixnum x) const
         uint8_t wlen = win & WINDOW_LEN_MASK;
         uint8_t e = win >> MAX_WINDOW_BITS;
         while (wlen-- > 0)
-            (*monty)(z, z);
+            monty(z, z);
         if (e)
-            (*monty)(z, z, G[e / 2]);
+            monty(z, z, G[e / 2]);
     }
-    monty->from_monty(z, z);
+    monty.from_monty(z, z);
 }
