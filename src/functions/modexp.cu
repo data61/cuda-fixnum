@@ -94,6 +94,10 @@ msb(const ulong *x, int ndigits, int start = -1)
     unsigned long d;
     assert(start < total_bits);
 
+    // ndigits = 0 => x = 0
+    if (ndigits == 0)
+        return -1;
+
     if (start < 0)
         start = total_bits - 1;
 
@@ -211,6 +215,7 @@ modexp<fixnum_impl>::modexp(
     ulong *exp;
     int expdigits;
 
+    // FIXME: expdigits can be zero.
     expdigits = iceil(expbytes, sizeof(ulong));
     exp = new ulong[expdigits];
     memset(exp, 0, expdigits * sizeof(ulong));
