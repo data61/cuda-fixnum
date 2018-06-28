@@ -27,7 +27,7 @@ public:
             msw = fixnum_impl::addmuli(x, mod, u);
 
             r = (L == i) ? msw : r;
-            slot_layout::shfl_down(x, 1);
+            x = slot_layout::shfl_down(x, 1);
             x = (L == T) ? slot_layout::shfl(s, i) : x;
         }
         msw = fixnum_impl::add_cy(s, x, r);

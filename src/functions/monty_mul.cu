@@ -138,7 +138,7 @@ monty_mul<fixnum_impl>::operator()(fixnum &z, fixnum x, fixnum y) const
         umad_lo_cc(z, cy, y, xi, z);
 
         assert(L || !z);  // z[0] must be 0
-        slot_layout::shfl_down0(z, 1); // Shift right one word
+        z = slot_layout::shfl_down0(z, 1); // Shift right one word
 
         //UADDC(z, cy, z, cy)
         z += cy;
@@ -149,7 +149,7 @@ monty_mul<fixnum_impl>::operator()(fixnum &z, fixnum x, fixnum y) const
     }
     // Resolve carries
     word_tp msw = fixnum_impl::most_sig_dig(cy);
-    slot_layout::shfl_up0(cy, 1); // left shift by 1
+    cy = slot_layout::shfl_up0(cy, 1); // left shift by 1
     msw += fixnum_impl::add_cy(z, z, cy);
     assert(msw == !!msw); // msw = 0 or 1.
 
