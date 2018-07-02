@@ -6,7 +6,7 @@ NVCC_LIBS = -lstdc++ -lgtest
 GENCODES = 50
 
 % : %.cu
-	nvcc $(NVCC_FLAGS) $(GENCODES:%=--gpu-architecture=compute_%) $(GENCODES:%=--gpu-code=sm_%) $(INCLUDE_DIRS) $(NVCC_LIBS) -o $@ $<
+	nvcc $(NVCC_FLAGS) $(GENCODES:%=--gpu-architecture=compute_%) $(GENCODES:%=--gpu-code=sm_%) $(INCLUDE_DIRS) $(NVCC_LIBS) -lgmp -o $@ $<
 
 all:
 	@echo "Please run 'make check' or 'make bench'."

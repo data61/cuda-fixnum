@@ -13,7 +13,8 @@
 
 #include "array/fixnum_array.h"
 #include "fixnum/default.cu"
-#include "functions/square.cu"
+#include "functions/monty_mul.cu"
+#include "functions/modexp.cu"
 
 using namespace std;
 
@@ -103,15 +104,6 @@ arrays_are_equal(
     return ::testing::AssertionSuccess();
 }
 
-template< typename fixnum_impl >
-struct add_cy : public managed {
-    typedef typename fixnum_impl::fixnum fixnum;
-
-    __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
-        fixnum_impl::add_cy(r, a, b);
-    }
-};
-
 
 template< typename fixnum_impl_ >
 struct TypedPrimitives : public ::testing::Test {
@@ -187,6 +179,27 @@ void set_args_from_tcases(
     }
 }
 
+template< typename fixnum_impl, typename Iter >
+void check_result(
+    const fixnum_array<fixnum_impl> *res,
+    Iter begin, Iter end)
+{
+    static constexpr size_t FIXNUM_BYTES = fixnum_impl::FIXNUM_BYTES;
+    int n = res->length();
+    int cnt = 0;
+    for (Iter i = begin; i < end; ++i, ++cnt) {
+        die_if(cnt == n, "more results than expected");
+        const byte_array &expected = *i;
+        uint8_t arr[FIXNUM_BYTES];
+        memset(arr, 0, FIXNUM_BYTES);
+
+        size_t b = res->retrieve_into(arr, FIXNUM_BYTES, cnt);
+        ASSERT_EQ(b, FIXNUM_BYTES);
+        EXPECT_TRUE(arrays_are_equal(expected.data(), expected.size(), arr, FIXNUM_BYTES)
+                    << " at index " << cnt);
+    }
+}
+
 template< typename fixnum_impl >
 void check_result(
     const vector<binop_args> &tcases,
@@ -232,6 +245,15 @@ void check_result(
     check_result(tcases, {arg});
 }
 
+template< typename fixnum_impl >
+struct add_cy : public managed {
+    typedef typename fixnum_impl::fixnum fixnum;
+
+    __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
+        fixnum_impl::add_cy(r, a, b);
+    }
+};
+
 TYPED_TEST(TypedPrimitives, add_cy) {
     typedef typename TestFixture::fixnum_impl fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
@@ -250,6 +272,36 @@ TYPED_TEST(TypedPrimitives, add_cy) {
     delete xs;
     delete ys;
 }
+
+
+template< typename fixnum_impl >
+struct sub_br : public managed {
+    typedef typename fixnum_impl::fixnum fixnum;
+
+    __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
+        fixnum_impl::sub_br(r, a, b);
+    }
+};
+
+TYPED_TEST(TypedPrimitives, sub_br) {
+    typedef typename TestFixture::fixnum_impl fixnum_impl;
+    typedef fixnum_array<fixnum_impl> fixnum_array;
+
+    fixnum_array *res, *xs, *ys;
+    vector<binop_args> tcases;
+    set_args_from_tcases("tests/sub_br", tcases, res, xs, ys);
+
+    auto fn = new sub_br<fixnum_impl>();
+    fixnum_array::map(fn, res, xs, ys);
+    delete fn;
+
+    // FIXME: check for borrows
+    check_result(tcases, res);
+    delete res;
+    delete xs;
+    delete ys;
+}
+
 
 template< typename fixnum_impl >
 struct mul_lo : public managed {
@@ -309,6 +361,191 @@ TYPED_TEST(TypedPrimitives, mul_wide) {
     delete ys;
 }
 
+
+template< typename fixnum_impl >
+struct to_monty : public managed {
+    typedef typename fixnum_impl::fixnum fixnum;
+    const monty_mul<fixnum_impl> *mul;
+
+    to_monty(const monty_mul<fixnum_impl> *mul_)
+        : mul(mul_) { }
+
+    __device__ void operator()(fixnum &z, fixnum x) {
+        mul->to_monty(z, x);
+    }
+};
+
+template< typename fixnum_impl >
+struct from_monty : public managed {
+    typedef typename fixnum_impl::fixnum fixnum;
+    const monty_mul<fixnum_impl> *mul;
+
+    from_monty(const monty_mul<fixnum_impl> *mul_)
+        : mul(mul_) { }
+
+    __device__ void operator()(fixnum &z, fixnum x) {
+        mul->from_monty(z, x);
+    }
+};
+
+TYPED_TEST(TypedPrimitives, monty_conversion)
+{
+    typedef typename TestFixture::fixnum_impl fixnum_impl;
+    typedef fixnum_array<fixnum_impl> fixnum_array;
+
+    fixnum_array *res, *xs, *ys;
+
+    int n = 13;
+    res = fixnum_array::create(n);
+    xs = fixnum_array::create(n, 7);
+    ys = fixnum_array::create(n);
+
+    // 23 + 39*256 = 10007 = nextprime(1e4)
+    static constexpr int modbytes = 8;
+    uint8_t modulus[modbytes] = { 23, 0, 0, 0, 0, 0, 0, 0 };
+
+    auto mul = new monty_mul<fixnum_impl>(modulus, modbytes);
+
+    // FIXME: The use of to_monty is awkward; should really consider making a
+    // first-class Monty representation.
+    auto to = new to_monty<fixnum_impl>(mul);
+    fixnum_array::map(to, res, xs);
+    delete to;
+
+    // Square
+    fixnum_array::map(mul, res, res);
+
+    auto from = new from_monty<fixnum_impl>(mul);
+    fixnum_array::map(from, ys, res);
+    delete from;
+
+    // check result.
+    static constexpr int FIXNUM_BYTES = fixnum_impl::FIXNUM_BYTES;
+    static constexpr size_t arrlen = FIXNUM_BYTES;
+    uint8_t arr1[arrlen];
+    uint8_t arr2[arrlen];
+
+    for (int i = 0; i < n; ++i) {
+        size_t b;
+        memset(arr1, 0, arrlen);
+        memset(arr2, 0, arrlen);
+        b = xs->retrieve_into(arr1, FIXNUM_BYTES, i);
+        ASSERT_EQ(b, FIXNUM_BYTES);
+        b = ys->retrieve_into(arr2, FIXNUM_BYTES, i);
+        ASSERT_EQ(b, FIXNUM_BYTES);
+
+        for (unsigned j = 0; j < arrlen; ++j) {
+            unsigned int t = arr1[j];
+            t = (t * t) % 23;
+            arr1[j] = t;
+        }
+
+        EXPECT_TRUE(arrays_are_equal(arr1, arrlen, arr2, arrlen)
+                    << " at index i = " << i);
+    }
+
+    delete mul;
+    delete res;
+    delete xs;
+    delete ys;
+}
+
+typedef vector<byte_array> tcase_args;
+
+// FIXME: This all sucks.
+
+template< typename T >
+const T *cast_to(const sexp *s) {
+    const T *x = dynamic_cast<const T *>(s);
+    die_if( ! x, "Failed to cast sexp");
+    return x;
+};
+
+vector<tcase_args>
+set_args_modexp(const char *fname) {
+    ifstream file(fname);
+    die_if ( ! file.good(), "Couldn't open file.");
+    const sexp *s = sexp::create(file);
+    const list *xs;
+
+    int n = -1;
+    vector<tcase_args> result;
+    xs = cast_to<list>(s);
+    for (const sexp *tc : xs->sexps) {
+        tcase_args args;
+        xs = cast_to<list>(tc);
+        for (const sexp *el : xs->sexps) {
+            const atom *a = cast_to<atom>(el);
+            args.push_back(a->data);
+        }
+        if (n < 0)
+            n = args.size();
+        die_if((int)args.size() != n, "Inconsistent argument lengths");
+        result.push_back(args);
+    }
+    delete s;
+    return result;
+}
+
+template< typename Iter, typename fixnum_impl >
+void
+set_fixnum_array(fixnum_array<fixnum_impl> *&xs, Iter begin, Iter end)
+{
+    static constexpr size_t FIXNUM_BYTES = fixnum_impl::FIXNUM_BYTES;
+    int n = xs->length();
+    int cnt = 0;
+    for (Iter i = begin; i < end; ++i, ++cnt) {
+        die_if(cnt == n, "got too many elements from file");
+        int r = xs->set(cnt, i->data(), i->size());
+        die_if((unsigned)r != std::min(i->size(), FIXNUM_BYTES), "fixnum overflow");
+    }
+}
+
+TYPED_TEST(TypedPrimitives, modexp) {
+    typedef typename TestFixture::fixnum_impl fixnum_impl;
+    typedef fixnum_array<fixnum_impl> fixnum_array;
+    static constexpr size_t FIXNUM_BYTES = fixnum_impl::FIXNUM_BYTES;
+
+    fixnum_array *res, *xs;
+    vector<tcase_args> tcases = set_args_modexp("tests/modexp");
+
+    // Each tcase is [n, e, *xs, *res], so len(xs) = len(res) = (size - 2)/2
+    int arglen = tcases[0].size();
+    die_if(arglen & 1, "args length should be even");
+    int n = (arglen - 2) / 2;
+    res = fixnum_array::create(n);
+    xs = fixnum_array::create(n);
+
+    int nskipped = 0;
+    int cnt = 0;
+    for (const tcase_args &args : tcases) {
+        const byte_array &mod = args[0], &exp = args[1];
+
+        ++cnt;
+        if (cnt < 151) continue;
+
+        if (mod.size() > FIXNUM_BYTES) {
+            ++nskipped;
+            continue;
+        }
+        auto first_x = args.begin() + 2;
+        set_fixnum_array(xs, first_x, first_x + n);
+
+        auto fn = new modexp<fixnum_impl>(
+            mod.data(), mod.size(), exp.data(), exp.size());
+        fixnum_array::map(fn, res, xs);
+        delete fn;
+        auto first_res = first_x + n;
+        check_result(res, first_res, first_res + n);
+    }
+    int ntests = tcases.size();
+    cerr << "Skipped " << nskipped << " / " << ntests
+         << " (" << setprecision(3) << nskipped * 100.0 / ntests << "%) "
+         << "tests to avoid truncation." << endl;
+
+    delete res;
+    delete xs;
+}
 
 int main(int argc, char *argv[])
 {

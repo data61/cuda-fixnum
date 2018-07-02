@@ -21,10 +21,10 @@ class default_fixnum_impl {
             "Fixnum word size must divide fixnum bytes.");
     static_assert(std::is_integral< word_tp_ >::value,
             "word_tp must be integral.");
-    static constexpr int WORD_BITS = 8 * sizeof(word_tp_);
 
 public:
     typedef word_tp_ word_tp;
+    static constexpr int WORD_BITS = 8 * sizeof(word_tp_);
     static constexpr int FIXNUM_BYTES = FIXNUM_BYTES_;
     static constexpr int SLOT_WIDTH = FIXNUM_BYTES_ / sizeof(word_tp_);
     // FIXME: slot_layout should not be exposed by this interface.
@@ -71,6 +71,11 @@ public:
      * load/set the value from ptr corresponding to this thread (lane) in
      * slot number idx.
      */
+    __device__ static fixnum load(const fixnum *ptr, int idx = 0) {
+        int off = idx * slot_layout::WIDTH + slot_layout::laneIdx();
+        return ptr[off];
+    }
+
     __device__ static fixnum &load(fixnum *ptr, int idx = 0) {
         int off = idx * slot_layout::WIDTH + slot_layout::laneIdx();
         return ptr[off];
@@ -100,18 +105,28 @@ public:
      * Arithmetic functions.
      */
 
+    // TODO: Handle carry in
     __device__ static int add_cy(fixnum &r, fixnum a, fixnum b) {
-        int cy;
+        // FIXME: Can't call std::numeric_limits<fixnum>::max() on device.
+        //static constexpr fixnum FIXNUM_MAX = std::numeric_limits<fixnum>::max();
+        static constexpr fixnum FIXNUM_MAX = ~(fixnum)0;
+        int cy, cy_hi;
         r = a + b;
         cy = r < a;
-        return resolve_carries(r, cy);
+        // r propagates carries iff r = FIXNUM_MAX
+        r += effective_carries(cy_hi, r == FIXNUM_MAX, cy);
+        return cy_hi;
     }
 
+    // TODO: Handle borrow in
     __device__ static int sub_br(fixnum &r, fixnum a, fixnum b) {
-        int br;
+        static constexpr fixnum FIXNUM_MIN = 0;
+        int br, br_hi;
         r = a - b;
         br = r > a;
-        return resolve_borrows(r, br);
+        // r propagates borrows iff r = FIXNUM_MIN
+        r -= effective_carries(br_hi, r == FIXNUM_MIN, br);
+        return br_hi;
     }
 
     __device__ static fixnum zero() {
@@ -253,48 +268,20 @@ public:
     }
 
 private:
-    __device__ static int resolve_carries(fixnum &r, int cy) {
-        // FIXME: Can't call std::numeric_limits<fixnum>::max() on device.
-        //static constexpr fixnum FIXNUM_MAX = std::numeric_limits<fixnum>::max();
-        static constexpr fixnum FIXNUM_MAX = ~(fixnum)0;
-        static constexpr int WIDTH = slot_layout::WIDTH;
+    __device__ static fixnum effective_carries(int &cy_hi, fixnum propagate, int cy) {
         int L = slot_layout::laneIdx();
         uint32_t allcarries, p, g;
-        int cy_hi;
 
         g = slot_layout::ballot(cy);              // carry generate
-        p = slot_layout::ballot(r == FIXNUM_MAX); // carry propagate
+        p = slot_layout::ballot(propagate);       // carry propagate
         allcarries = (p | g) + g;                 // propagate all carries
-        // FIXME: Unify these two expressions to remove the conditional;
-        // the simple expression is not correct when WIDTH != warpSize
-        //cy_hi = allcarries < g;                   // detect final overflow
-        cy_hi = (WIDTH == 32) ? (allcarries < g) : ((allcarries >> WIDTH) & 1);
+        // NB: There is no way to unify these two expressions to remove the
+        // conditional. The conditional should be optimised away though, since
+        // WIDTH is a compile-time constant.
+        cy_hi = (slot_layout::WIDTH == WARPSIZE) // detect hi overflow
+            ? (allcarries < g)
+            : ((allcarries >> slot_layout::WIDTH) & 1);
         allcarries = (allcarries ^ p) | (g << 1); // get effective carries
-        r += (allcarries >> L) & 1;
-
-        // return highest carry
-        return cy_hi;
-    }
-
-    __device__ static int resolve_borrows(fixnum &r, int cy) {
-        // FIXME: This is at best a half-baked attempt to adapt
-        // the carry propagation code above to the case of
-        // subtraction.
-        // FIXME: Use std::numeric_limits<fixnum>::min
-        static constexpr fixnum FIXNUM_MIN = 0;
-        int L = slot_layout::laneIdx();
-        uint32_t allcarries, p, g;
-        int cy_hi;
-
-        g = ~slot_layout::ballot(cy);             // carry generate
-        p = ~slot_layout::ballot(r == FIXNUM_MIN);// carry propagate
-        allcarries = (p & g) - g;                 // propagate all carries
-        // FIXME: This is not correct when WIDTH != warpSize
-        cy_hi = allcarries > g;                   // detect final underflow
-        allcarries = (allcarries ^ p) | (g >> 1); // get effective carries
-        r -= (allcarries >> L) & 1;
-
-        // return highest carry
-        return cy_hi;
+        return (allcarries >> L) & 1;
     }
 };

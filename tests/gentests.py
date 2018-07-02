@@ -1,4 +1,4 @@
-from itertools import product
+from itertools import chain, product
 from collections import Iterable
 from timeit import default_timer as timer
 import operator
@@ -28,6 +28,23 @@ def write_list(dest, lst):
             write_atom(dest, el)
     dest.write(CLOSE_PAREN)
 
+def modexp_tests(xs, ns, es):
+    return [[n, e]
+            + [x % n for x in xs]
+            + [pow(x, e, n) for x in xs]
+            for n, e in product(ns, es) if n > 2 and n % 2 == 1]
+
+def mkmodexptests(fname):
+    xs = generate_interesting_numbers()
+    t = timer()
+    print('Writing {} tests into "{}"... '.format(len(xs)**3, fname), end='', flush=True)
+    with open(fname, 'wb') as f:
+        write_list(f, modexp_tests(xs, xs, xs))
+    t = timer() - t
+    print('done ({:.2f}s).'.format(t))
+    return fname
+
+
 def gentests(op, xs, ys):
     return ([x, y, op(x, y)] for x, y in product(xs, ys))
 
@@ -43,8 +60,8 @@ def mktests(fname, arg):
 
 def sub_br(x, y):
     if x >= y:
-        return x - y, 0
-    return y - x, 1
+        return x - y
+    return (x - y) % 2**2048
 
 def generate_interesting_numbers(max_bits=2048, digit_bits=32):
     nums = list(range(12))
@@ -75,3 +92,4 @@ def generate_everything():
 
 if __name__ == '__main__':
     generate_everything()
+    mkmodexptests('modexp')
