@@ -24,6 +24,38 @@ public:
     __device__ void operator()(fixnum &z, fixnum x, fixnum e) const;
 };
 
+
+static void
+k_ary_window_params(
+    int &win_quo, int &win_rem, int &win_size,
+    int exp_bits, int word_bits)
+{
+    // Iterate through window sizes while nmults is decreasing; works because
+    // 2^k + b(1 + 1/k) is convex.
+    // TODO: These values should be determined by experiment on the hardware.
+    // In particular, the choice below simply minimises the number of
+    // multiplications; in many circumstances the trade-off with register
+    // pressure would suggest using a smaller window size (basically because the
+    // convex function above is quite flat around its minimum).
+
+    // nmults <- 2(b + 1) = ceil(2^k + b(1 + 1/k)) at k = 1
+    for (int k = 2, nmults = 2 * (exp_bits + 1); k < word_bits; ++k) {
+        // nmults = ceil(2^k + b(1 + 1/k))
+        int nmults_next = iceil(k * (1 << k) + exp_bits * (k + 1), k);
+        // check for upturn
+        if (nmults_next > nmults)
+            break;
+        nmults = nmults_next;
+    }
+    // k can't be bigger than a word.
+    assert(k < word_bits);
+
+    win_size = k;
+    win_quo = word_bits / k;
+    win_rem = word_bits % k;
+}
+
+
 /*
  * Left-to-right k-ary exponentiation (see [HAC, Algorithm 14.82]).
  *
