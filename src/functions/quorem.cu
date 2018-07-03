@@ -41,7 +41,7 @@ quorem<fixnum_impl>::quorem(const uint8_t *div, size_t nbytes)
     // Require at least one of the high 4 bits to be switched on. This
     // determines the maximum number of corrections needed at the end
     // of a reduction in quorem_rem.
-    enum { MIN_MSW = (word_tp)1 << (WORD_BITS - 5) };
+    static constexpr word_tp MIN_MSW = (word_tp)1 << (WORD_BITS - 5);
 
     if (nbytes > FIXNUM_BYTES)
         throw std::exception("divisor is too big"); // TODO: More precise exception
