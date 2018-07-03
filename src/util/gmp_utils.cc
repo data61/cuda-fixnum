@@ -165,3 +165,50 @@ get_R_and_Rsqr_mod(digit_t R_mod[NDIGITS], digit_t R_sqr_mod[NDIGITS], const uin
     mpz_clear(n);
     mpz_clear(r);
 }
+
+
+/*
+ * Given arrays Mod and Mu of width digits, set
+ *
+ *   (Mu, Mu_msw) = floor(2^(2*NBITS) / Mod)
+ *
+ * where NBITS := NDIGITS * DIGIT_BITS, and (Mu, Mu_msw) represents the
+ * number Mu with most significant word Mu_msw.  Assumes the top word
+ * of Mod is not zero.
+ *
+ * This value is used in Barrett reduction; see 'quorem.cu'.
+ */
+template< int NDIGITS, typename digit_t >
+void
+get_mu(digit_t Mu[NDIGITS], digit_t &Mu_msw, const digit_t Mod[NDIGITS])
+{
+    static constexpr int DIGIT_BITS = sizeof(digit_t) * 8;
+    static constexpr int NBITS = NDIGITS * DIGIT_BITS;
+    mpz_t b, mu, mod, t;
+
+    mpz_init_set_ui(b, 1);
+    mpz_init(mu);
+    mpz_init(mod);
+    mpz_init(t);
+
+    intmod_to_mpz(mod, Mod, NDIGITS);
+
+    // b = 2^(2*NBITS)
+    mpz_mul_2exp(b, b, 2 * NBITS);
+    // mu = floor(b / mod)
+    mpz_fdiv_q(mu, b, mod);
+
+    // Extract top word
+    mpz_fdiv_q_2exp(t, mu, NBITS);
+    assert(mpz_sizeinbase(t, 2) <= DIGIT_BITS);
+    Mu_msw = mpz_get_ui(t);
+    mpz_fdiv_r_2exp(mu, mu, NBITS);
+
+    intmod_from_mpz(Mu, mu, NDIGITS);
+
+    mpz_clear(b);
+    mpz_clear(mu);
+    mpz_clear(mod);
+    mpz_clear(t);
+}
+

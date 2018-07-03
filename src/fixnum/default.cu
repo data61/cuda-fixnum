@@ -155,6 +155,23 @@ public:
         return sub_br(r, r, one());
     }
 
+    /*
+     * r += a * u.
+     *
+     * The product a*u is done 'component-wise'; useful when a or u is
+     * constant across the slot, though this is not necessary.
+     */
+    __device__ static fixnum mad_cy(fixnum &r, fixnum a, fixnum u) {
+        fixnum cy_hi, hi;
+
+        umad(hi, r, a, u, r);
+        cy_hi = most_sig_dig(hi);
+        hi = slot_layout::shfl_up0(hi, 1);
+        cy_hi += add_cy(r, hi, r);
+
+        return cy_hi;
+    }
+
 
     /*
      * r = lo_half(a * b)
