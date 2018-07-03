@@ -1,25 +1,38 @@
 #pragma once
 
 #include "util/managed.cu"
+#include "functions/modinv.cu"
 
 template< typename fixnum_impl >
 struct divexact : public managed {
     typedef typename fixnum_impl::fixnum fixnum;
 
-    // FIXME: It would be better to set bi here.
+    /*
+     * TODO: This should take the divisor as an argument and store its inverse
+     * bi as an instance variable.
+     */
     divexact() { }
 
     /*
-     * q = a / b, assuming b divides a. bi must be 1/B (mod 2^(NBITS/2))
-     * where NBITS := SLOT_WIDTH*FIXNUM_BITS.  bi is nevertheless treated as an
+     * q = a / b, assuming b divides a. Optional bi must be 1/B (mod 2^(NBITS/2))
+     * where NBITS := FIXNUM_BITS.  bi is nevertheless treated as an
      * NBITS fixnum, so its hi half must be all zeros.
      *
      * Source: MCA Algorithm 1.10.
      */
-    __device__ void operator()(fixnum &q, fixnum a, fixnum b, fixnum bi) {
+    __device__ void operator()(fixnum &q, fixnum a, fixnum b, fixnum bi = 0) const {
         fixnum t, w = 0;
 
-        // NBITS := SLOT_WIDTH*FIXNUM_BITS
+        // b must be odd
+        // TODO: Handle even b.
+        fixnum b0 = fixnum_impl::get(b, 0);
+        assert(b0 & 1);
+
+        // Calculate b inverse if it is not provided.
+        if ( ! fixnum_impl::nonzero_mask(bi)) {
+            modinv minv;
+            minv(bi, b, FIXNUM_BITS/2);
+        }
 
         // w <- a bi  (mod 2^(NBITS / 2))
 
