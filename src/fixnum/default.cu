@@ -92,6 +92,16 @@ public:
     }
 
     /*
+     * Set var digit at index idx to be x.
+     *
+     * FIXME: Not clear how to interpret this function with more exotic fixnum
+     * implementations such as RNS.
+     */
+    __device__ static void set(fixnum &var, fixnum x, int idx) {
+        var = (slot_layout::laneIdx() == idx) ? x : var;
+    }
+
+    /*
      * Return most significant digit.
      *
      * FIXME: Not clear how to interpret this function with more exotic fixnum
