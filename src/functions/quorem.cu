@@ -27,6 +27,12 @@ public:
     quorem(const uint8_t *div, size_t nbytes);
 
     __device__ void operator()(fixnum &q, fixnum &r, fixnum A_hi, fixnum A_lo) const;
+
+    // Just return the remainder.
+    __device__ void operator()(fixnum &r, fixnum A_hi, fixnum A_lo) const {
+        fixnum q;
+        (*this)(q, r, A_hi, A_lo);
+    }
 };
 
 /*
@@ -45,7 +51,10 @@ quorem<fixnum_impl>::quorem(const uint8_t *div, size_t nbytes)
 
     if (nbytes > FIXNUM_BYTES)
         throw std::exception("divisor is too big"); // TODO: More precise exception
+    memset(this->div, 0, FIXNUM_BYTES);
     memcpy(this->div, div, nbytes);
+    // FIXME: This is not the right way to enforce the restriction on
+    // the relative sizes of the divisor and the dividend.
     if (div[WIDTH - 1] < MIN_MSW)
         throw std::exception("divisor is too small"); // TODO: More precise exception
     get_mu<WIDTH>(mu, mu_msw, div);
@@ -106,13 +115,18 @@ quorem<fixnum_impl>::operator()(fixnum &q, fixnum &r, fixnum A_hi, fixnum A_lo) 
     assert(L == 0 || msw == 0);
     msw = slot_layout::shfl(msw, 0);
 
+    // NB: Could call incr_cy in the loops instead; as is it will
+    // incur an extra add_cy even when msw is 0 and r < d.
+    fixnum q_inc = 0;
     while (msw) {
         msw -= fixnum_impl::sub_br(r, r, d);
-        fixnum_impl::incr_cy(q);
+        ++q_inc;
     }
     while ( ! fixnum_impl::sub_br(t, r, d)) {
         r = t;
-        fixnum_impl::incr_cy(q);
+        ++q_inc;
     }
+    q_inc = (L == 0) ? q_inc : 0;
+    fixnum_impl::add_cy(q, q, q_inc);
 }
 
