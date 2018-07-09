@@ -28,14 +28,13 @@ struct modinv : public managed {
         assert(b0 & 1);
         assert(k > 0 && k <= FIXNUM_BITS);
 
-        fixnum binv = modinv_2k(b0);
-        if (k < WORD_BITS)
-            binv &= ((word_tp)1 << k) - 1;
+        fixnum binv = modinv_2k(b0, WORD_BITS);
         x = 0;
         fixnum_impl::set(x, binv, 0);
         if (k <= WORD_BITS)
             return;
 
+        // Hensel lift x from (mod 2^WORD_BITS) to (mod 2^k)
         // FIXME: Double-check this condition on k!
         while (k >>= 1) {
             // TODO: Make multiplications faster by using the "middle
@@ -70,13 +69,19 @@ private:
     }
 
     /*
-     * Return 1/b (mod n) where n is 2^k and b is odd. Require k > 0 && k < ULONG_BITS.
+     * Return 1/b (mod n) where n is 2^k and b is odd; result is
+     * correct for 0 <= k <= ULONG_BITS.
+     *
+     * NB: This function does a left shift by k, which, according to
+     * K&R A.7.8, is only defined for 0 <= k < ULONG_BITS.  On most
+     * systems, a left shift with k >= ULONG_BITS will just result in
+     * 0, which is what we want in this case.
      */
     __host__ __device__ __forceinline__
     static ulong
     modinv_2k(ulong b, ulong k) {
-        assert(k > 0 && k < ULONG_BITS);
-        return modinv_2k(b) & ((1UL << k) - 1);
+        ulong binv = modinv_2k(b);
+        return binv & ((1UL << k) - 1UL);
     }
 };
 
