@@ -4,19 +4,24 @@
 #include "functions/modinv.cu"
 
 template< typename fixnum_impl >
-struct divexact : public managed {
+class divexact : public managed {
+#if 0
+    // Divisor
+    word_tp div[WIDTH];
+    // 1/div (mod 2^(NBITS/2)) where NBITS := FIXNUM_BITS.  div_inv is
+    // nevertheless treated as an NBITS fixnum, so its hi half must be
+    // all zeros.
+    word_tp div_inv[WIDTH];
+#endif
+
+public:
     typedef typename fixnum_impl::fixnum fixnum;
 
-    /*
-     * TODO: This should take the divisor as an argument and store its inverse
-     * bi as an instance variable.
-     */
+    //divexact(const uint8_t *div, size_t nbytes) { }
     divexact() { }
 
     /*
-     * q = a / b, assuming b divides a. Optional bi must be 1/B (mod 2^(NBITS/2))
-     * where NBITS := FIXNUM_BITS.  bi is nevertheless treated as an
-     * NBITS fixnum, so its hi half must be all zeros.
+     * q = a / div, assuming div divides a.
      *
      * Source: MCA Algorithm 1.10.
      */
