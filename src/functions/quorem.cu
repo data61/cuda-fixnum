@@ -2,9 +2,6 @@
 
 #include <stdexcept>
 
-#include "util/gmp_utils.h"
-#include "util/managed.cu"
-
 /*
  * Quotient and remainder via Barrett reduction.
  *
@@ -13,18 +10,13 @@
  * width: digits in div and mu.
  */
 template< typename fixnum_impl >
-class quorem : public managed {
-    typedef typename fixnum_impl::word_tp word_tp;
-    static constexpr int fixnum_impl::SLOT_WIDTH WIDTH;
-
-    word_tp div[WIDTH];
-    word_tp mu[WIDTH];
-    word_tp mu_msw;
-
+class quorem {
 public:
     typedef typename fixnum_impl::fixnum fixnum;
 
-    quorem(const uint8_t *div, size_t nbytes);
+    // TODO: mu and mu_msw should be calculated from div on the device
+    // when we support general modular inverses.
+    __device__ quorem(fixnum div, fixnum mu, fixnum mu_msw);
 
     __device__ void operator()(fixnum &q, fixnum &r, fixnum A_hi, fixnum A_lo) const;
 
@@ -33,6 +25,11 @@ public:
         fixnum q;
         (*this)(q, r, A_hi, A_lo);
     }
+
+private:
+    static constexpr int fixnum_impl::SLOT_WIDTH WIDTH;
+
+    fixnum div, mu, mu_msw;
 };
 
 /*
@@ -42,27 +39,23 @@ public:
  * on, or if nbytes > FIXNUM_BYTES.
  */
 template< typename fixnum_impl >
-quorem<fixnum_impl>::quorem(const uint8_t *div, size_t nbytes)
+__device__
+quorem<fixnum_impl>::quorem(fixnum div_, fixnum mu_, fixnum mu_msw_)
+    : div(div_), mu(mu_), mu_msw(mu_msw_)
 {
     // Require at least one of the high 4 bits to be switched on. This
     // determines the maximum number of corrections needed at the end
-    // of a reduction in quorem_rem.
+    // of a reduction.
     static constexpr word_tp MIN_MSW = (word_tp)1 << (WORD_BITS - 5);
 
-    if (nbytes > FIXNUM_BYTES)
-        throw std::exception("divisor is too big"); // TODO: More precise exception
-    memset(this->div, 0, FIXNUM_BYTES);
-    memcpy(this->div, div, nbytes);
     // FIXME: This is not the right way to enforce the restriction on
     // the relative sizes of the divisor and the dividend.
-    if (div[WIDTH - 1] < MIN_MSW)
-        throw std::exception("divisor is too small"); // TODO: More precise exception
-    get_mu<WIDTH>(mu, mu_msw, div);
+    assert(fixnum_impl::most_sig_dig(div) < MIN_MSW);
 }
 
 
 /*
- * Return the quotient and remainder of A after division by this->div.
+ * Return the quotient and remainder of A after division by div.
  *
  * Uses Barret reduction.  See HAC, Algo 14.42, and MCA, Algo 2.5.
  *
@@ -76,7 +69,7 @@ template< typename fixnum_impl >
 __device__ void
 quorem<fixnum_impl>::operator()(fixnum &q, fixnum &r, fixnum A_hi, fixnum A_lo) const
 {
-    word_tp d, t, msw, hi, lo, br;
+    fixnum t, msw, hi, lo, br;
 
     int L = slot_layout::laneIdx();
 
@@ -85,13 +78,12 @@ quorem<fixnum_impl>::operator()(fixnum &q, fixnum &r, fixnum A_hi, fixnum A_lo) 
     // be able to use a mul_hi() function that only calculates an
     // approximate answer (see Short Product discussion at MCA,
     // Section 3.3 (from Section 2.4.1, p59)).
-    fixnum_impl::mul_wide(q, t, A_hi, fixnum_impl::load(mu));
+    fixnum_impl::mul_wide(q, t, A_hi, mu);
     msw = fixnum_impl::mad_cy(q, A_hi, mu_msw);
 
     // (hi, lo) = q*d
-    d = fixnum_impl::load(div);
-    fixnum_impl::mul_wide(hi, lo, q, d);
-    msw = fixnum_impl::mad_cy(hi, d, msw);
+    fixnum_impl::mul_wide(hi, lo, q, div);
+    msw = fixnum_impl::mad_cy(hi, div, msw);
 
     // q*d always fits in two fixnums, even though msw of q is
     // sometimes non-zero.
@@ -119,10 +111,10 @@ quorem<fixnum_impl>::operator()(fixnum &q, fixnum &r, fixnum A_hi, fixnum A_lo) 
     // incur an extra add_cy even when msw is 0 and r < d.
     fixnum q_inc = 0;
     while (msw) {
-        msw -= fixnum_impl::sub_br(r, r, d);
+        msw -= fixnum_impl::sub_br(r, r, div);
         ++q_inc;
     }
-    while ( ! fixnum_impl::sub_br(t, r, d)) {
+    while ( ! fixnum_impl::sub_br(t, r, div)) {
         r = t;
         ++q_inc;
     }

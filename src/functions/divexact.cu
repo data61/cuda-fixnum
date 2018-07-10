@@ -1,43 +1,41 @@
 #pragma once
 
-#include "util/managed.cu"
 #include "functions/modinv.cu"
 
 template< typename fixnum_impl >
-class divexact : public managed {
-#if 0
+class divexact {
     // Divisor
-    word_tp div[WIDTH];
-    // 1/div (mod 2^(NBITS/2)) where NBITS := FIXNUM_BITS.  div_inv is
+    fixnum b;
+    // 1/b (mod 2^(NBITS/2)) where NBITS := FIXNUM_BITS.  bi is
     // nevertheless treated as an NBITS fixnum, so its hi half must be
     // all zeros.
-    word_tp div_inv[WIDTH];
-#endif
+    fixnum bi;
 
 public:
     typedef typename fixnum_impl::fixnum fixnum;
 
-    //divexact(const uint8_t *div, size_t nbytes) { }
-    divexact() { }
+    __device__ divexact(fixnum divisor) {
+        b = divisor;
 
-    /*
-     * q = a / div, assuming div divides a.
-     *
-     * Source: MCA Algorithm 1.10.
-     */
-    __device__ void operator()(fixnum &q, fixnum a, fixnum b, fixnum bi = 0) const {
-        fixnum t, w = 0;
-
-        // b must be odd
-        // TODO: Handle even b.
+        // divisor must be odd
+        // TODO: Handle even divisor. Should be easy: just make sure
+        // the 2-part of the divisor and dividend are the same and
+        // then remove them.
         fixnum b0 = fixnum_impl::get(b, 0);
         assert(b0 & 1);
 
-        // Calculate b inverse if it is not provided.
-        if ( ! fixnum_impl::nonzero_mask(bi)) {
-            modinv minv;
-            minv(bi, b, FIXNUM_BITS/2);
-        }
+        // Calculate b inverse
+        modinv minv;
+        minv(bi, b, fixnum_impl::FIXNUM_BITS/2);
+    }
+
+    /*
+     * q = a / b, assuming b divides a.
+     *
+     * Source: MCA Algorithm 1.10.
+     */
+    __device__ void operator()(fixnum &q, fixnum a) const {
+        fixnum t, w = 0;
 
         // w <- a bi  (mod 2^(NBITS / 2))
 

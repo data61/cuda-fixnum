@@ -1,7 +1,5 @@
 #pragma once
 
-#include "util/managed.cu"
-
 // TODO: This obviously belongs somewhere else.
 typedef unsigned long ulong;
 
@@ -10,10 +8,10 @@ typedef unsigned long ulong;
  * TODO: Only supports moduli of the form 2^k at the moment.
  */
 template< typename fixnum_impl >
-struct modinv : public managed {
+struct modinv {
     typedef typename fixnum_impl::fixnum fixnum;
 
-    modinv() { }
+    __host__ __device__ modinv() { }
 
     /*
      * Return x = 1/b (mod 2^k).  Must have 0 < k <= FIXNUM_BITS.
@@ -25,7 +23,6 @@ struct modinv : public managed {
     __device__ void operator()(fixnum &x, fixnum b, int k) const {
         // b must be odd
         fixnum b0 = fixnum_impl::get(b, 0);
-        assert(b0 & 1);
         assert(k > 0 && k <= FIXNUM_BITS);
 
         fixnum binv = modinv_2k(b0, WORD_BITS);
