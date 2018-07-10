@@ -210,3 +210,58 @@ fixnum_array<fixnum_impl>::map(Func<fixnum_impl> *fn, Args... args) {
         cuda_device_synchronize();
     }
 }
+
+
+template< template <typename> class Func, typename fixnum_impl, typename... Args >
+__global__ void
+dispatch_new(int nelts, Args... args) {
+    // Get the slot index for the current thread.
+    int blk_tid_offset = blockDim.x * blockIdx.x;
+    int tid_in_blk = threadIdx.x;
+    int idx = (blk_tid_offset + tid_in_blk) / fixnum_impl::SLOT_WIDTH;
+
+    if (idx < nelts) {
+        Func<fixnum_impl> fn;
+        fn(fixnum_impl::load(args, idx)...);
+    }
+}
+
+template< typename fixnum_impl >
+template< template <typename> class Func, typename... Args >
+void
+fixnum_array<fixnum_impl>::map_new(Args... args) {
+    // TODO: Set this to the number of threads on a single SM on the host GPU.
+    constexpr int BLOCK_SIZE = 192;
+
+    // FIXME: WARPSIZE should come from slot_layout
+    constexpr int WARPSIZE = 32;
+    // BLOCK_SIZE must be a multiple of warpSize
+    static_assert(!(BLOCK_SIZE % WARPSIZE),
+            "block size must be a multiple of warpSize");
+
+    int nelts = std::min( { args->length()... } );
+
+    // FIXME: Check this calculation
+    constexpr int fixnums_per_block = BLOCK_SIZE / fixnum_impl::SLOT_WIDTH;
+
+    // FIXME: nblocks could be too big for a single kernel call to handle
+    int nblocks = iceil(nelts, fixnums_per_block);
+
+    // nblocks > 0 iff nelts > 0
+    if (nblocks > 0) {
+        cudaStream_t stream;
+        cuda_check(cudaStreamCreate(&stream), "create stream");
+//         cuda_stream_attach_mem(stream, src->ptr);
+//         cuda_stream_attach_mem(stream, ptr);
+        cuda_check(cudaStreamSynchronize(stream), "stream sync");
+
+        dispatch_new<Func, fixnum_impl ><<< nblocks, BLOCK_SIZE, 0, stream >>>(nelts, args->ptr...);
+
+        cuda_check(cudaPeekAtLastError(), "kernel invocation/run");
+        cuda_check(cudaStreamSynchronize(stream), "stream sync");
+        cuda_check(cudaStreamDestroy(stream), "stream destroy");
+
+        // FIXME: Only synchronize when retrieving data from array
+        cuda_device_synchronize();
+    }
+}

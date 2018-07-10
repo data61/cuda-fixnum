@@ -27,6 +27,9 @@ public:
     template< template <typename> class Func, typename... Args >
     static void map(Func<fixnum_impl> *fn, Args... args);
 
+    template< template <typename> class Func, typename... Args >
+    static void map_new(Args... args);
+
 private:
     static constexpr int FIXNUM_STORAGE_WORDS = fixnum_impl::SLOT_WIDTH;
 

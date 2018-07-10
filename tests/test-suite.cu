@@ -246,7 +246,7 @@ void check_result(
 }
 
 template< typename fixnum_impl >
-struct add_cy : public managed {
+struct add_cy {
     typedef typename fixnum_impl::fixnum fixnum;
 
     __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
@@ -262,9 +262,7 @@ TYPED_TEST(TypedPrimitives, add_cy) {
     vector<binop_args> tcases;
     set_args_from_tcases("tests/add_cy", tcases, res, xs, ys);
 
-    auto fn = new add_cy<fixnum_impl>();
-    fixnum_array::map(fn, res, xs, ys);
-    delete fn;
+    fixnum_array::template map_new<add_cy>(res, xs, ys);
 
     // FIXME: check for carries
     check_result(tcases, res);
@@ -275,7 +273,7 @@ TYPED_TEST(TypedPrimitives, add_cy) {
 
 
 template< typename fixnum_impl >
-struct sub_br : public managed {
+struct sub_br {
     typedef typename fixnum_impl::fixnum fixnum;
 
     __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
@@ -291,9 +289,7 @@ TYPED_TEST(TypedPrimitives, sub_br) {
     vector<binop_args> tcases;
     set_args_from_tcases("tests/sub_br", tcases, res, xs, ys);
 
-    auto fn = new sub_br<fixnum_impl>();
-    fixnum_array::map(fn, res, xs, ys);
-    delete fn;
+    fixnum_array::template map_new<sub_br>(res, xs, ys);
 
     // FIXME: check for borrows
     check_result(tcases, res);
@@ -304,7 +300,7 @@ TYPED_TEST(TypedPrimitives, sub_br) {
 
 
 template< typename fixnum_impl >
-struct mul_lo : public managed {
+struct mul_lo {
     typedef typename fixnum_impl::fixnum fixnum;
 
     __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
@@ -320,9 +316,7 @@ TYPED_TEST(TypedPrimitives, mul_lo) {
     vector<binop_args> tcases;
     set_args_from_tcases("tests/mul_wide", tcases, res, xs, ys);
 
-    auto fn = new mul_lo<fixnum_impl>();
-    fixnum_array::map(fn, res, xs, ys);
-    delete fn;
+    fixnum_array::template map_new<mul_lo>(res, xs, ys);
 
     check_result(tcases, res);
     delete res;
@@ -331,7 +325,7 @@ TYPED_TEST(TypedPrimitives, mul_lo) {
 }
 
 template< typename fixnum_impl >
-struct mul_wide : public managed {
+struct mul_wide {
     typedef typename fixnum_impl::fixnum fixnum;
 
     __device__ void operator()(fixnum &s, fixnum &r, fixnum a, fixnum b) {
@@ -350,9 +344,9 @@ TYPED_TEST(TypedPrimitives, mul_wide) {
     // FIXME: This should be set in set_args_from_tcases somehow.
     his = fixnum_array::create(tcases.size());
 
-    auto fn = new mul_wide<fixnum_impl>();
-    fixnum_array::map(fn, his, los, xs, ys);
-    delete fn;
+    // C++ sucks:
+    // https://stackoverflow.com/questions/610245/where-and-why-do-i-have-to-put-the-template-and-typename-keywords
+    fixnum_array::template map_new< mul_wide >(his, los, xs, ys);
 
     check_result(tcases, {los, his});
     delete his;
@@ -361,94 +355,6 @@ TYPED_TEST(TypedPrimitives, mul_wide) {
     delete ys;
 }
 
-
-template< typename fixnum_impl >
-struct to_monty : public managed {
-    typedef typename fixnum_impl::fixnum fixnum;
-    const monty_mul<fixnum_impl> *mul;
-
-    to_monty(const monty_mul<fixnum_impl> *mul_)
-        : mul(mul_) { }
-
-    __device__ void operator()(fixnum &z, fixnum x) {
-        mul->to_monty(z, x);
-    }
-};
-
-template< typename fixnum_impl >
-struct from_monty : public managed {
-    typedef typename fixnum_impl::fixnum fixnum;
-    const monty_mul<fixnum_impl> *mul;
-
-    from_monty(const monty_mul<fixnum_impl> *mul_)
-        : mul(mul_) { }
-
-    __device__ void operator()(fixnum &z, fixnum x) {
-        mul->from_monty(z, x);
-    }
-};
-
-TYPED_TEST(TypedPrimitives, monty_conversion)
-{
-    typedef typename TestFixture::fixnum_impl fixnum_impl;
-    typedef fixnum_array<fixnum_impl> fixnum_array;
-
-    fixnum_array *res, *xs, *ys;
-
-    int n = 13;
-    res = fixnum_array::create(n);
-    xs = fixnum_array::create(n, 7);
-    ys = fixnum_array::create(n);
-
-    // 23 + 39*256 = 10007 = nextprime(1e4)
-    static constexpr int modbytes = 8;
-    uint8_t modulus[modbytes] = { 23, 0, 0, 0, 0, 0, 0, 0 };
-
-    auto mul = new monty_mul<fixnum_impl>(modulus, modbytes);
-
-    // FIXME: The use of to_monty is awkward; should really consider making a
-    // first-class Monty representation.
-    auto to = new to_monty<fixnum_impl>(mul);
-    fixnum_array::map(to, res, xs);
-    delete to;
-
-    // Square
-    fixnum_array::map(mul, res, res);
-
-    auto from = new from_monty<fixnum_impl>(mul);
-    fixnum_array::map(from, ys, res);
-    delete from;
-
-    // check result.
-    static constexpr int FIXNUM_BYTES = fixnum_impl::FIXNUM_BYTES;
-    static constexpr size_t arrlen = FIXNUM_BYTES;
-    uint8_t arr1[arrlen];
-    uint8_t arr2[arrlen];
-
-    for (int i = 0; i < n; ++i) {
-        size_t b;
-        memset(arr1, 0, arrlen);
-        memset(arr2, 0, arrlen);
-        b = xs->retrieve_into(arr1, FIXNUM_BYTES, i);
-        ASSERT_EQ(b, FIXNUM_BYTES);
-        b = ys->retrieve_into(arr2, FIXNUM_BYTES, i);
-        ASSERT_EQ(b, FIXNUM_BYTES);
-
-        for (unsigned j = 0; j < arrlen; ++j) {
-            unsigned int t = arr1[j];
-            t = (t * t) % 23;
-            arr1[j] = t;
-        }
-
-        EXPECT_TRUE(arrays_are_equal(arr1, arrlen, arr2, arrlen)
-                    << " at index i = " << i);
-    }
-
-    delete mul;
-    delete res;
-    delete xs;
-    delete ys;
-}
 
 typedef vector<byte_array> tcase_args;
 
@@ -517,12 +423,8 @@ TYPED_TEST(TypedPrimitives, modexp) {
     xs = fixnum_array::create(n);
 
     int nskipped = 0;
-    int cnt = 0;
     for (const tcase_args &args : tcases) {
         const byte_array &mod = args[0], &exp = args[1];
-
-        ++cnt;
-        if (cnt < 151) continue;
 
         if (mod.size() > FIXNUM_BYTES) {
             ++nskipped;
