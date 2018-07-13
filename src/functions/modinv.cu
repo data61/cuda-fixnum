@@ -1,7 +1,6 @@
 #pragma once
 
-// TODO: This obviously belongs somewhere else.
-typedef unsigned long ulong;
+#include "util/primitives.cu"
 
 /*
  * Calculate the modular inverse.
@@ -41,44 +40,6 @@ struct modinv {
             fixnum_impl::mul_lo(t, t, x);
             fixnum_impl::add_cy(x, x, t);
         }
-    }
-
-private:
-    /*
-     * Return 1/b (mod 2^ULONG_BITS) where b is odd.
-     *
-     * Source: MCA, Section 2.5.
-     */
-    __host__ __device__ __forceinline__
-    static ulong
-    modinv_2k(ulong b) {
-        assert(b & 1);
-
-        // TODO: Could jump into this list of iterations according to value of k
-        // which would save several multiplications when k <= ULONG_BITS/2.
-        ulong x;
-        x = (2 - b * b) * b;
-        x *= 2 - b * x;
-        x *= 2 - b * x;
-        x *= 2 - b * x;
-        x *= 2 - b * x;
-        return x;
-    }
-
-    /*
-     * Return 1/b (mod n) where n is 2^k and b is odd; result is
-     * correct for 0 <= k <= ULONG_BITS.
-     *
-     * NB: This function does a left shift by k, which, according to
-     * K&R A.7.8, is only defined for 0 <= k < ULONG_BITS.  On most
-     * systems, a left shift with k >= ULONG_BITS will just result in
-     * 0, which is what we want in this case.
-     */
-    __host__ __device__ __forceinline__
-    static ulong
-    modinv_2k(ulong b, ulong k) {
-        ulong binv = modinv_2k(b);
-        return binv & ((1UL << k) - 1UL);
     }
 };
 

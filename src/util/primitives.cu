@@ -218,6 +218,112 @@ ctz(uint64_t x) {
 #endif
 }
 
+__device__ __forceinline__
+int32_t
+min(int32_t a, int32_t b) {
+    int32_t m;
+    asm ("min.s32 %0, %1, %2;" : "=r"(m) : "r"(a), "r"(b));
+    return m;
+}
+
+__device__ __forceinline__
+int64_t
+min(int64_t a, int64_t b) {
+    int64_t m;
+    asm ("min.s64 %0, %1, %2;" : "=l"(m) : "l"(a), "l"(b));
+    return m;
+}
+
+__device__ __forceinline__
+uint32_t
+min(uint32_t a, uint32_t b) {
+    uint32_t m;
+    asm ("min.u32 %0, %1, %2;" : "=r"(m) : "r"(a), "r"(b));
+    return m;
+}
+
+__device__ __forceinline__
+uint64_t
+min(uint64_t a, uint64_t b) {
+    uint64_t m;
+    asm ("min.u64 %0, %1, %2;" : "=l"(m) : "l"(a), "l"(b));
+    return m;
+}
+
+__device__ __forceinline__
+int32_t
+max(int32_t a, int32_t b) {
+    int32_t m;
+    asm ("max.s32 %0, %1, %2;" : "=r"(m) : "r"(a), "r"(b));
+    return m;
+}
+
+__device__ __forceinline__
+int64_t
+max(int64_t a, int64_t b) {
+    int64_t m;
+    asm ("max.s64 %0, %1, %2;" : "=l"(m) : "l"(a), "l"(b));
+    return m;
+}
+
+__device__ __forceinline__
+uint32_t
+max(uint32_t a, uint32_t b) {
+    uint32_t m;
+    asm ("max.u32 %0, %1, %2;" : "=r"(m) : "r"(a), "r"(b));
+    return m;
+}
+
+__device__ __forceinline__
+uint64_t
+max(uint64_t a, uint64_t b) {
+    uint64_t m;
+    asm ("max.u64 %0, %1, %2;" : "=l"(m) : "l"(a), "l"(b));
+    return m;
+}
+
+
+// TODO: This obviously belongs somewhere else.
+typedef unsigned long ulong;
+
+// TODO: Rewrite these two functions in terms of uint{32,64}_t.
+/*
+ * Return 1/b (mod 2^ULONG_BITS) where b is odd.
+ *
+ * Source: MCA, Section 2.5.
+ */
+__host__ __device__ __forceinline__
+ulong
+modinv_2k(ulong b) {
+    assert(b & 1);
+
+    // TODO: Could jump into this list of iterations according to value of k
+    // which would save several multiplications when k <= ULONG_BITS/2.
+    ulong x;
+    x = (2 - b * b) * b;
+    x *= 2 - b * x;
+    x *= 2 - b * x;
+    x *= 2 - b * x;
+    x *= 2 - b * x;
+    return x;
+}
+
+/*
+ * Return 1/b (mod n) where n is 2^k and b is odd; result is
+ * correct for 0 <= k <= ULONG_BITS.
+ *
+ * NB: This function does a left shift by k, which, according to
+ * K&R A.7.8, is only defined for 0 <= k < ULONG_BITS.  On most
+ * systems, a left shift with k >= ULONG_BITS will just result in
+ * 0, which is what we want in this case.
+ */
+__host__ __device__ __forceinline__
+ulong
+modinv_2k(ulong b, ulong k) {
+    ulong binv = modinv_2k(b);
+    return binv & ((1UL << k) - 1UL);
+}
+
 /*
  * GCD of x and y.
  *
