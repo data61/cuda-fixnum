@@ -34,6 +34,22 @@ umul(uint64_t &r, uint32_t a, uint32_t b) {
          : "r"(a), "r"(b));
 }
 
+// hi * 2^32 + lo = a * b
+__device__ __forceinline__ void
+umul_hi(uint32_t &hi, uint32_t a, uint32_t b) {
+    asm ("mul.hi.u32 %0, %1, %2;"
+         : "=r"(hi)
+         : "r"(a), "r"(b));
+}
+
+// hi * 2^64 + lo = a * b
+__device__ __forceinline__ void
+umul_hi(uint64_t &hi, uint64_t a, uint64_t b) {
+    asm ("mul.hi.u64 %0, %1, %2;"
+         : "=l"(hi)
+         : "l"(a), "l"(b));
+}
+
 // hi * 2^64 + lo = a * b
 __device__ __forceinline__ void
 umul(uint64_t &hi, uint64_t &lo, uint64_t a, uint64_t b) {
