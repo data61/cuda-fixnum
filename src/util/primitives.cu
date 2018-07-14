@@ -163,10 +163,14 @@ umad_hi_cc(uint64_t &hi, uint64_t &cy, uint64_t a, uint64_t b, uint64_t c) {
  *  - redundantly store each element in a uint32_t
  *  - pack two uint16_t values into each uint32_t
  *  - is __constant__ the right storage specifier? Maybe load into shared memory?
+ *    Shared memory seems like an excellent choice (48k available per SM), though
+ *    I'll need to be mindful of bank conflicts (perhaps circumvent by having
+ *    many copies of the data in SM?).
  *  - perhaps reading an element from memory is slower than simply calculating
  *    floor((2^24 - 2^14 + 2^9)/d) in assembly?
  */
-__constant__ uint16_t RECIPROCAL_TABLE_32[512] =
+__device__ __constant__ uint16_t
+RECIPROCAL_TABLE_32[0x200] =
 {
     0x7fe1, 0x7fa1, 0x7f61, 0x7f22, 0x7ee3, 0x7ea4, 0x7e65, 0x7e27,
     0x7de9, 0x7dab, 0x7d6d, 0x7d30, 0x7cf3, 0x7cb6, 0x7c79, 0x7c3d,
@@ -234,6 +238,13 @@ __constant__ uint16_t RECIPROCAL_TABLE_32[512] =
     0x4071, 0x4061, 0x4050, 0x4040, 0x4030, 0x4020, 0x4010, 0x4000
 };
 
+__device__ __forceinline__ uint32_t
+lookup_reciprocal(uint32_t d10) {
+    assert((d10 >> 9) == 1);
+    return RECIPROCAL_TABLE_32[d10 - 0x200];
+}
+
+
 /*
  * Source: Niels Möller and Torbjörn Granlund, “Improved division by
  * invariant integers”, IEEE Transactions on Computers, 11 June
@@ -243,7 +254,7 @@ __device__ __forceinline__ uint32_t
 uquorem_reciprocal(uint32_t d)
 {
     // Top bit must be set, i.e. d must be already normalised.
-    assert(d & (1 << 31));
+    assert((d >> 31) == 1);
 
     uint32_t d0_mask, d10, d21, d31, v0, v1, v2, v3, e, t0, t1;
 
@@ -252,10 +263,10 @@ uquorem_reciprocal(uint32_t d)
     d21 = (d >> 11) + 1;
     d31 = d - (d >> 1);  // ceil(d/2) = d - floor(d/2)
 
-    v0 = RECIPROCAL_TABLE_32[d10]; // 15 bits
+    v0 = lookup_reciprocal(d10); // 15 bits
     umul_hi(t0, v0 * v0, d21);
     v1 = (v0 << 4) - t0 - 1;   // 18 bits
-    e = -(v1 * d31) + (v1 >> 1) & d0_mask;
+    e = -(v1 * d31) + ((v1 >> 1) & d0_mask);
     umul_hi(t0, v1, e);
     v2 = (v1 << 15) + (t0 >> 1); // 33 bits (hi bit is implicit)
     umul_wide(t1, t0, v2, d);
@@ -277,7 +288,8 @@ uquorem_reciprocal(uint32_t d)
  * TODO: Investigate whether alternative storage layouts are better;
  * see RECIPROCAL_TABLE_32 above for ideas.
  */
-__constant__ uint16_t RECIPROCAL_TABLE_64[256] =
+__device__ __constant__ uint16_t
+RECIPROCAL_TABLE_64[0x100] =
 {
     0x7fd, 0x7f5, 0x7ed, 0x7e5, 0x7dd, 0x7d5, 0x7ce, 0x7c6,
     0x7bf, 0x7b7, 0x7b0, 0x7a8, 0x7a1, 0x79a, 0x792, 0x78b,
@@ -313,6 +325,12 @@ __constant__ uint16_t RECIPROCAL_TABLE_64[256] =
     0x40e, 0x40c, 0x40a, 0x408, 0x406, 0x404, 0x402, 0x400
 };
 
+__device__ __forceinline__ uint64_t
+lookup_reciprocal(uint64_t d9) {
+    assert((d9 >> 8) == 1);
+    return RECIPROCAL_TABLE_64[d9 - 0x100];
+}
+
 /*
  * Source: Niels Möller and Torbjörn Granlund, “Improved division by
  * invariant integers”, IEEE Transactions on Computers, 11 June
@@ -322,7 +340,7 @@ __device__ __forceinline__ uint64_t
 uquorem_reciprocal(uint64_t d)
 {
     // Top bit must be set, i.e. d must be already normalised.
-    assert(d & (1 << 31));
+    assert((d >> 63) == 1);
 
     uint64_t d0_mask, d9, d40, d63, v0, v1, v2, v3, v4, e, t0, t1;
 
@@ -331,15 +349,13 @@ uquorem_reciprocal(uint64_t d)
     d40 = (d >> 24) + 1;
     d63 = d - (d >> 1);  // ceil(d/2) = d - floor(d/2)
 
-    v0 = RECIPROCAL_TABLE_64[d9]; // 11 bits
-    umul_lo(t0, v0 * v0, d40);
+    v0 = lookup_reciprocal(d9); // 11 bits
+    t0 = v0 * v0 * d40;
     v1 = (v0 << 11) - (t0 >> 40) - 1;   // 21 bits
-    umul_lo(t0, v1, d40);
-    t0 = (1 << 60) - t0;
-    umul_lo(t0, v1, t0);
+    t0 = v1 * ((1UL << 60) - (v1 * d40));
     v2 = (v1 << 13) + (t0 >> 47); // 34 bits
 
-    e = -(v2 * d63) + (v1 >> 1) & d0_mask;
+    e = -(v2 * d63) + ((v1 >> 1) & d0_mask);
     umul_hi(t0, v2, e);
     v3 = (v2 << 31) + (t0 >> 1);  // 65 bits (hi bit is implicit)
     umul_wide(t1, t0, v3, d);
@@ -348,40 +364,35 @@ uquorem_reciprocal(uint64_t d)
     return v4;
 }
 
-// FIXME FIXME: d needs to be normalised prior to calling the function below.
-
 /*
  * Suppose Q and r satisfy U = Qd + r, where Q = (q_hi, q_lo) and U =
  * (u_hi, u_lo) are two-word numbers. This function returns q = min(Q,
  * 2^WORD_BITS - 1) and r = U - Qd if q = Q or r = q in the latter
  * case.  v should be set to uquorem_reciprocal(d).
  *
+ * CAVEAT EMPTOR: d and {u_hi, u_lo} need to be normalised (using the
+ * functions provided) PRIOR to being passed to this
+ * function. Similarly, the resulting remainder r (but NOT the
+ * quotient q) needs to be denormalised (i.e. right shift by the
+ * normalisation factor) after reciept.
+ *
  * Source: Niels Möller and Torbjörn Granlund, “Improved division by
  * invariant integers”, IEEE Transactions on Computers, 11 June
  * 2010. https://gmplib.org/~tege/division-paper.pdf
  */
 template< typename uint_tp >
-__device__ __forceinline__ void
+__device__ void
 uquorem_wide(
     uint_tp &q, uint_tp &r,
     uint_tp u_hi, uint_tp u_lo, uint_tp d, uint_tp v)
 {
     static_assert(std::is_unsigned<uint_tp>::value == true,
                   "template type must be unsigned");
+    static constexpr int WORD_BITS = sizeof(uint_tp)*8;
     if (u_hi > d) {
-        q = r = (word_tp)-1;
+        q = r = (uint_tp)-1;
         return;
     }
-
-    // FIXME FIXME: d needs to be normalised prior to calling this
-    // function. The normalisation factor needs to be passed in with
-    // the reciprocal.
-
-    // Normalise d and u, i.e. ensure the top bit of d is set.
-    int lz = clz(d);
-    d <<= lz;
-    u_hi = (u_hi << lz) | (u_lo >> (WORD_BITS - lz));
-    u_lo <<= lz;
 
     uint_tp q_hi, q_lo, mask;
 
@@ -391,13 +402,13 @@ uquorem_wide(
     r = u_lo - q_hi * d;
 
     // Branch is unpredicable
-    // if (r > q_lo) { --q_hi; r += d; }
+    //if (r > q_lo) { --q_hi; r += d; }
     mask = -(uint_tp)(r > q_lo);
     q_hi += mask;
     r += mask & d;
 
     // Branch is very unlikely to be taken
-    // if (r >= d) { r -= d; ++q_hi; }
+    //if (r >= d) { r -= d; ++q_hi; }
     mask = -(uint_tp)(r >= d);
     q_hi -= mask;
     r -= mask & d;
@@ -406,20 +417,73 @@ uquorem_wide(
 }
 
 /*
- * As above, but calculate, then throw away, the precomputed inverse.
+ * As above, but calculate, then throw away, the precomputed inverse
+ * as well as the normalisations of the divisor and dividend
  */
 template< typename uint_tp >
-__device__ __forceinline__ void
+__device__ void
 uquorem_wide(
-    uint_tp &q_hi, uint_tp &q_lo, uint_tp &r,
+    uint_tp &q, uint_tp &r,
     uint_tp u_hi, uint_tp u_lo, uint_tp d)
 {
     static_assert(std::is_unsigned<uint_tp>::value == true,
                   "template type must be unsigned");
-    uint_tp v = uquorem_reciprocal(c);
-    uquorem_wide(q_hi, q_lo, r, u_hi, u_lo, d, v);
+    int lz = quorem_normalise_divisor(d);
+    uint_tp overflow = quorem_normalise_dividend(u_hi, u_lo, lz);
+    assert(overflow == 0);
+    uint_tp v = uquorem_reciprocal(d);
+    uquorem_wide(q, r, u_hi, u_lo, d, v);
+    assert(r % ((uint_tp)1 << lz) == 0);
+    r >>= lz;
 }
 
+template< typename uint_tp >
+__host__ __device__ int
+quorem_normalise_divisor(uint_tp &d) {
+    int lz = clz(d);
+    d <<= lz;
+    return lz;
+}
+
+template< typename uint_tp >
+__host__ __device__ uint_tp
+quorem_normalise_dividend(uint_tp &u_hi, uint_tp &u_lo, int cnt) {
+    // TODO: For 32 bit operands we can just do the following
+    // asm ("shf.l.clamp.b32 %0, %1, %0, %2;\n\t"
+    //      "shl.b32 %1, %1, %2;"
+    //     : "+r"(u_hi), "+r"(u_lo) : "r"(cnt));
+    //
+    // For 64 bits it's a bit more long-winded
+    // Inspired by https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#logic-and-shift-instructions-shf
+    // asm ("{\n\t"
+    //     " .reg .u32 t1;\n\t"
+    //     " .reg .u32 t2;\n\t"
+    //     " .reg .u32 t3;\n\t"
+    //     " .reg .u32 t4;\n\t"
+    //     " mov.b64 { t1, t2 }, %0;\n\t"
+    //     " mov.b64 { t3, t4 }, %1;\n\t"
+    //     " shf.l.clamp.b32 t4, t3, t4, %2;\n\t"
+    //     " shf.l.clamp.b32 t3, t2, t3, %2;\n\t"
+    //     " shf.l.clamp.b32 t2, t1, t2, %2;\n\t"
+    //     " shl.b32 t1, t1, %2;\n\t"
+    //     " mov.b64 %0, { t1, t2 };\n\t"
+    //     " mov.b64 %1, { t3, t4 };\n\t"
+    //     "}"
+    //     : "+l"(u_lo), "+l"(u_hi) : "r"(cnt));
+
+    uint_tp overflow = u_hi >> (WORD_BITS - lz);
+    uint_tp u_hi_lsb = u_lo >> (WORD_BITS - lz);
+#ifndef __CUDA_ARCH__
+    // Compensate for the fact that, unlike CUDA, shifts by WORD_BITS
+    // are undefined in C.
+    // u_hi_lsb = 0 if lz=0 or u_hi_lsb if lz!=0.
+    u_hi_lsb &= -(uint_tp)!!lz;
+    overflow &= -(uint_tp)!!lz;
+#endif
+    u_hi = (u_hi << lz) | u_hi_lsb;
+    u_lo <<= lz;
+    return overflow;
+}
 
  /*
  * Count Leading Zeroes in x.
