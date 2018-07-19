@@ -242,7 +242,7 @@ struct slot_layout
     shfl_down0(T var, unsigned int delta) {
         T res = shfl_down(var, delta);
         //return res & -(T)(laneIdx() < toplaneIdx());
-        return laneIdx() > (toplaneIdx - delta) ? 0 : res;
+        return laneIdx() >= (WIDTH - delta) ? 0 : res;
     }
 
 private:
