@@ -20,6 +20,8 @@ struct modinv {
      * TODO: Calculate this using the multiple inversion trick (MCA 2.5.1)
      */
     __device__ void operator()(fixnum &x, fixnum b, int k) const {
+        static constexpr int FIXNUM_BITS = fixnum_impl::FIXNUM_BYTES * 8;
+        static constexpr int WORD_BITS = fixnum_impl::WORD_BITS;
         // b must be odd
         fixnum b0 = fixnum_impl::get(b, 0);
         assert(k > 0 && k <= FIXNUM_BITS);
@@ -33,6 +35,7 @@ struct modinv {
         // Hensel lift x from (mod 2^WORD_BITS) to (mod 2^k)
         // FIXME: Double-check this condition on k!
         while (k >>= 1) {
+            fixnum t;
             // TODO: Make multiplications faster by using the "middle
             // product" (see MCA 1.4.5 and 3.3.2).
             fixnum_impl::mul_lo(t, b, x);
