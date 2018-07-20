@@ -155,26 +155,6 @@ struct slot_layout
         return __shfl_down(var, delta, width);
     }
 
-    // NB: Assumes delta <= width + L. (There should be no reason for
-    // it ever to be more than width.)
-    static __device__ __forceinline__
-    uint32_t
-    rotate_up(uint32_t var, unsigned int delta) {
-        int L = laneIdx();
-        // Don't need to reduce srcLane modulo width; that is done by __shfl.
-        int srcLane = L + width - delta; //  The +width is to ensure srcLane > 0
-        return __shfl(var, srcLane, width);
-    }
-
-    static __device__ __forceinline__
-    uint32_t
-    rotate_down(uint32_t var, unsigned int delta) {
-        int L = laneIdx();
-        // Don't need to reduce srcLane modulo width; that is done by __shfl.
-        int srcLane = L + delta;
-        return __shfl(var, srcLane, width);
-    }
-
     /*
      * The next three functions extend the usual shuffle functions to 64bit
      * parameters.  See CUDA C Programming Guide, B.14:
@@ -222,6 +202,28 @@ struct slot_layout
         return res;
     }
 
+    // NB: Assumes delta <= width + L. (There should be no reason for
+    // it ever to be more than width.)
+    template< typename T >
+    static __device__ __forceinline__
+    T
+    rotate_up(T var, unsigned int delta) {
+        int L = laneIdx();
+        // Don't need to reduce srcLane modulo width; that is done by __shfl.
+        int srcLane = L + width - delta; //  The +width is to ensure srcLane > 0
+        return shfl(var, srcLane);
+    }
+
+    template< typename T >
+    static __device__ __forceinline__
+    T
+    rotate_down(T var, unsigned int delta) {
+        int L = laneIdx();
+        // Don't need to reduce srcLane modulo width; that is done by __shfl.
+        int srcLane = L + delta;
+        return shfl(var, srcLane);
+    }
+
     /*
      * Like shfl_up but set bottom delta variables to zero.
      */
@@ -243,7 +245,7 @@ struct slot_layout
     shfl_down0(T var, unsigned int delta) {
         T res = shfl_down(var, delta);
         //return res & -(T)(laneIdx() < toplaneIdx());
-        return laneIdx() >= (WIDTH - delta) ? 0 : res;
+        return laneIdx() >= (width - delta) ? 0 : res;
     }
 
 private:
