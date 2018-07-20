@@ -99,6 +99,7 @@ struct slot_layout
         //                 = threadIdx - (threadIdx & (width - 1))
         //                 // TODO: Do use this last formulation!
         //                 = set bottom log2(width) bits of threadIdx to zero
+        //                 = T & ~mask ??
         //
         // since width = 2^n.
         return T - (T & (width - 1));
@@ -159,18 +160,18 @@ struct slot_layout
     static __device__ __forceinline__
     uint32_t
     rotate_up(uint32_t var, unsigned int delta) {
-        // FIXME: Doesn't necessarily work for width != 32
         int L = laneIdx();
-        int srcLane = (L + width - delta) & (width - 1);
+        // Don't need to reduce srcLane modulo width; that is done by __shfl.
+        int srcLane = L + width - delta; //  The +width is to ensure srcLane > 0
         return __shfl(var, srcLane, width);
     }
 
     static __device__ __forceinline__
     uint32_t
     rotate_down(uint32_t var, unsigned int delta) {
-        // FIXME: Doesn't necessarily work for width != 32
         int L = laneIdx();
-        int srcLane = (L + delta) & (width - 1);
+        // Don't need to reduce srcLane modulo width; that is done by __shfl.
+        int srcLane = L + delta;
         return __shfl(var, srcLane, width);
     }
 
