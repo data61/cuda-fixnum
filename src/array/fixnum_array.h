@@ -22,13 +22,8 @@ public:
     size_t retrieve_into(uint8_t *dest, size_t dest_space, int idx) const;
     void retrieve_all(uint8_t *dest, size_t dest_space, int *nelts) const;
 
-    // Use:
-    // fixnum_array::map(ec_add<fixnum_impl>(a, b), res, arr1, arr2);
     template< template <typename> class Func, typename... Args >
-    static void map(Func<fixnum_impl> *fn, Args... args);
-
-    template< template <typename> class Func, typename... Args >
-    static void map_new(Args... args);
+    static void map(Args... args);
 
 private:
     static constexpr int FIXNUM_STORAGE_WORDS = fixnum_impl::SLOT_WIDTH;
