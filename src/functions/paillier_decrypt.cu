@@ -1,7 +1,7 @@
 #pragma once
 
 #include "utils/managed.cu"
-#include "functions/quorem.cu"
+#include "functions/quorem_preinv.cu"
 #include "functions/divexact.cu"
 #include "functions/chinese.cu"
 #include "functions/modexp.cu"
@@ -20,7 +20,7 @@ class paillier_decrypt : public managed {
     word_tp q[WIDTH];
 
     // Remainder after division by p^2 and q^2
-    quorem<fixnum_impl> mod_p2, mod_q2;
+    quorem_preinv<fixnum_impl> mod_p2, mod_q2;
     paillier_decrypt_mod<fixnum_impl> decrypt_modp, decrypt_modq;
     chinese<fixnum_impl> crt;
 
@@ -75,7 +75,7 @@ class paillier_decrypt_mod : public managed {
 
     // FIXME: comment above about width applies here too.
     // Remainder after division by mod.
-    quorem<fixnum_impl> rem_mod;
+    quorem_preinv<fixnum_impl> rem_mod;
 
     // Modexp for x |--> x^(mod - 1) (mod mod^2)
     modexp<fixnum_impl> pow;

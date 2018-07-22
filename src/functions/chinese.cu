@@ -1,15 +1,13 @@
 #pragma once
 
-#include "functions/quorem.cu"
+#include "functions/quorem_preinv.cu"
 
 template< typename fixnum_impl >
 class chinese {
 public:
     typedef typename fixnum_impl::fixnum fixnum;
 
-    // TODO: mu and mu_msw should be calculated from div on the device
-    // when we support general modular inverses.
-    __device__ chinese(fixnum p, fixnum q, fixnum p_inv_modq, fixnum mu, fixnum mu_msw);
+    __device__ chinese(fixnum p, fixnum q, fixnum p_inv_modq);
 
     __device__ void operator()(fixnum &m, fixnum mp, fixnum mq) const;
 
@@ -18,17 +16,17 @@ private:
     // space, and (worse) the operations below waste cycles.
     fixnum p, q, c;  // c = p^-1 (mod q)
 
-    quorem mod_q;
+    quorem_preinv mod_q;
 };
 
 template< typename fixnum_impl >
 __device__
 chinese<fixnum_impl>::chinese(
-    fixnum p, fixnum q, fixnum p_inv_modq, fixnum mu, fixnum mu_msw)
-    : mod_q(q, mu, mu_msw)
+    fixnum p, fixnum q, fixnum p_inv_modq)
+    : mod_q(q)
 {
     // TODO: q is now stored here and in mod_q; need to work out how
-    // to share q between them.  Probably best just to provide quorem
+    // to share q between them.  Probably best just to provide quorem_preinv
     // with an accessor to the divisor.
 }
 
