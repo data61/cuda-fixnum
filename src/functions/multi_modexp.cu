@@ -1,15 +1,13 @@
 #pragma once
 
-#include "util/managed.cu"
-#include "util/primitives.cu"
 #include "functions/monty_mul.cu"
 
-// FIXME: Factor out code in common with modexp
-#include "functions/modexp.cu"
-
-template< typename fixnum_impl >
-class multi_modexp : public managed {
+template< typename fixnum_impl, int WINDOW_SIZE = 5 >
+class multi_modexp {
+    static_assert(WINDOW_SIZE >= 1 && WINDOW_SIZE <= 7,
+                  "Invalid or unreasonable window size specified.");
     static constexpr int WIDTH = fixnum_impl::SLOT_WIDTH;
+    static constexpr int WORD_BITS = fixnum_impl::WORD_BITS;
 
     // TODO: Generalise multi_modexp so that it can work with any modular
     // multiplication algorithm.
@@ -18,13 +16,15 @@ class multi_modexp : public managed {
 public:
     typedef typename fixnum_impl::fixnum fixnum;
 
-    multi_modexp(const uint8_t *mod, size_t modbytes)
-    : monty(mod, modbytes) { }
+    __device__ multi_modexp(fixnum mod)
+    : monty(mod) { }
 
     __device__ void operator()(fixnum &z, fixnum x, fixnum e) const;
 };
 
 
+// TODO: Finish this properly and use it to set the window length.
+#if 0
 static void
 k_ary_window_params(
     int &win_quo, int &win_rem, int &win_size,
@@ -54,7 +54,7 @@ k_ary_window_params(
     win_quo = word_bits / k;
     win_rem = word_bits % k;
 }
-
+#endif
 
 /*
  * Left-to-right k-ary exponentiation (see [HAC, Algorithm 14.82]).
@@ -63,9 +63,9 @@ k_ary_window_params(
  * [HAC, Algo 14.83] since there the number of squarings depends on
  * the 2-adic valuation of the window value.
  */
-template< typename fixnum_impl >
+template< typename fixnum_impl, int WINDOW_SIZE >
 __device__ void
-multi_modexp<fixnum_impl>::operator()(fixnum &z, fixnum x, fixnum e) const
+multi_modexp<fixnum_impl, WINDOW_SIZE>::operator()(fixnum &z, fixnum x, fixnum e) const
 {
     // TODO: WINDOW_MAX should be determined by the length of e, or --
     // better -- by experiment.  The number of multiplications for
@@ -80,13 +80,11 @@ multi_modexp<fixnum_impl>::operator()(fixnum &z, fixnum x, fixnum e) const
     //
     // TODO: This enum should be integrated with the similar code in
     // monty_modexp above.
-    enum {
-        WINDOW_MAIN_BITS = 5,
-        WINDOW_REM_BITS = 4,
-        WINDOW_MAX = (1U << WINDOW_MAIN_BITS),
-        WINDOW_MAIN_MASK = (1U << WINDOW_MAIN_BITS) - 1,
-        WINDOW_REM_MASK = (1U << WINDOW_REM_BITS) - 1
-    };
+    static constexpr int WINDOW_MAIN_BITS = WINDOW_SIZE;
+    static constexpr int WINDOW_REM_BITS = WORD_BITS % WINDOW_SIZE;
+    static constexpr int WINDOW_MAX = (1U << WINDOW_MAIN_BITS);
+    static constexpr int WINDOW_MAIN_MASK = (1U << WINDOW_MAIN_BITS) - 1;
+    static constexpr int WINDOW_REM_MASK = (1U << WINDOW_REM_BITS) - 1;
 
     /* G[t] = z^t, t >= 0 */
     fixnum G[WINDOW_MAX];
@@ -98,15 +96,15 @@ multi_modexp<fixnum_impl>::operator()(fixnum &z, fixnum x, fixnum e) const
     }
 
     z = G[0];
-    for (int i = slot_layout::WIDTH - 1; i >= 0; --i) {
+    for (int i = WIDTH - 1; i >= 0; --i) {
         fixnum f = fixnum_impl::get(e, i);
 
         // TODO: The squarings are noops on the first iteration (i =
         // w-1) and should be removed.
         //
-        // Window decomposition: 64 = 12 * 5 + 4
+        // Window decomposition: WORD_BITS = q * 5 + r
         int win;
-        for (int j = 64 - WINDOW_MAIN_BITS; j >= 0; j -= WINDOW_MAIN_BITS) {
+        for (int j = WORD_BITS - WINDOW_MAIN_BITS; j >= 0; j -= WINDOW_MAIN_BITS) {
             // TODO: For some bizarre reason, it is significantly
             // faster to do this loop than it is to unroll the 5
             // statements manually.  Idem for the remainder below.
