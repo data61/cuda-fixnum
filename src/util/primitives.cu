@@ -527,7 +527,12 @@ int
 ctz(uint32_t x) {
 #ifdef __CUDA_ARCH__
     int n;
-    asm ("ctz.b32 %0, %1;" : "=r"(n) : "r"(x));
+    asm ("{\n\t"
+         " .reg .u32 tmp;\n\t"
+         " brev.b32 tmp, %1;\n\t"
+         " clz.b32 %0, tmp;\n\t"
+         "}"
+         : "=r"(n) : "r"(x));
     return n;
 #else
     static_assert(sizeof(unsigned int) == sizeof(uint32_t),
@@ -541,7 +546,12 @@ int
 ctz(uint64_t x) {
 #ifdef __CUDA_ARCH__
     int n;
-    asm ("ctz.b64 %0, %1;" : "=r"(n) : "l"(x));
+    asm ("{\n\t"
+         " .reg .u64 tmp;\n\t"
+         " brev.b64 tmp, %1;\n\t"
+         " clz.b64 %0, tmp;\n\t"
+         "}"
+         : "=r"(n) : "l"(x));
     return n;
 #else
     static_assert(sizeof(unsigned long) == sizeof(uint64_t),
