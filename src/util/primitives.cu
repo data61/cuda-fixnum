@@ -439,9 +439,9 @@ uquorem_wide(
 template< typename uint_tp >
 __host__ __device__ int
 quorem_normalise_divisor(uint_tp &d) {
-    int lz = clz(d);
-    d <<= lz;
-    return lz;
+    int cnt = clz(d);
+    d <<= cnt;
+    return cnt;
 }
 
 template< typename uint_tp >
@@ -470,17 +470,18 @@ quorem_normalise_dividend(uint_tp &u_hi, uint_tp &u_lo, int cnt) {
     //     "}"
     //     : "+l"(u_lo), "+l"(u_hi) : "r"(cnt));
 
-    uint_tp overflow = u_hi >> (WORD_BITS - lz);
-    uint_tp u_hi_lsb = u_lo >> (WORD_BITS - lz);
+    static constexpr int WORD_BITS = sizeof(uint_tp) * 8;
+    uint_tp overflow = u_hi >> (WORD_BITS - cnt);
+    uint_tp u_hi_lsb = u_lo >> (WORD_BITS - cnt);
 #ifndef __CUDA_ARCH__
     // Compensate for the fact that, unlike CUDA, shifts by WORD_BITS
     // are undefined in C.
-    // u_hi_lsb = 0 if lz=0 or u_hi_lsb if lz!=0.
-    u_hi_lsb &= -(uint_tp)!!lz;
-    overflow &= -(uint_tp)!!lz;
+    // u_hi_lsb = 0 if cnt=0 or u_hi_lsb if cnt!=0.
+    u_hi_lsb &= -(uint_tp)!!cnt;
+    overflow &= -(uint_tp)!!cnt;
 #endif
-    u_hi = (u_hi << lz) | u_hi_lsb;
-    u_lo <<= lz;
+    u_hi = (u_hi << cnt) | u_hi_lsb;
+    u_lo <<= cnt;
     return overflow;
 }
 
