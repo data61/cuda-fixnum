@@ -1,5 +1,5 @@
 from itertools import chain, product
-from collections import Iterable
+from collections import Iterable, deque
 from timeit import default_timer as timer
 import operator
 
@@ -45,39 +45,63 @@ def mkmodexptests(fname):
     return fname
 
 
-def gentests(op, xs, ys):
-    return ([x, y, op(x, y)] for x, y in product(xs, ys))
-
 def mktests(fname, arg):
-    op, xs, ys = arg
+    op, xs, bits = arg
     t = timer()
-    print('Writing {} tests into "{}"... '.format(len(xs) * len(ys), fname), end='', flush=True)
+    print('Writing {} tests into "{}"... '.format(len(xs)**2, fname), end='', flush=True)
     with open(fname, 'wb') as f:
-        write_list(f, gentests(op, xs, ys))
+        f.write(bits >> 3)
+        f.write(len(xs))
+        f.write(2) # How many output values?
+        f.write(xs)
+        f.write(op(xs, bits))
     t = timer() - t
     print('done ({:.2f}s).'.format(t))
     return fname
 
-def sub_br(x, y):
-    if x >= y:
-        return x - y
-    return (x - y) % 2**2048
+def add_cy(xs, bits):
+    ys = deque(xs)
+    res = []
+    for i in range(len(xs)):
+        ys.rotate(1)
+        res.append(zip(*[[(x + y) & ((1<<bits) - 1), (x + y) >> bits] for x, y in zip(xs, ys)]))
+    return res
 
-def generate_interesting_numbers(max_bits=2048, digit_bits=32):
-    nums = list(range(12))
-    for i in range(-2, 5):
-        b = (i * digit_bits - 2) % max_bits
-        nums.extend((1 << b) + k for k in range(-4, 4))
-        nums.extend(1 << (b + k) for k in range(6))
-#        nums.extend(1 << k for k in range(0, max_bits, 29))
-#        nums.extend((1 << k) - 1 for k in range(0, max_bits, 29))
+def sub_br(xs, bits):
+    ys = deque(xs)
+    res = []
+    for i in range(len(xs)):
+        ys.rotate(1)
+        res.append(zip(*[[(x - y) & ((1<<bits) - 1), int(x < y)] for x, y in zip(xs, ys)]))
+    return res
 
+def mul_wide(xs, bits):
+    ys = deque(xs)
+    res = []
+    for i in range(len(xs)):
+        ys.rotate(1)
+        res.append(zip(*[[(x * y) & ((1<<bits) - 1), (x * y) >> bits] for x, y in zip(xs, ys)]))
+    return res
+
+def test_inputs_four_bytes():
+    nums = [1, 2, 3];
+    nums.extend([2^32 - n for n in nums])
+    nums.extend([0xFF << i for i in range(4)])
+    nums.extend([0, 0xFFFF, 0xFFFF0000, 0xFF00FF00, 0xFF00FF, 0xF0F0F0F0, 0x0F0F0F0F])
+    #nums.extend([1 << i for i in range(32)])
+    nums.append(0)
     return nums
+
+def test_inputs(nbytes):
+    assert nbytes >= 4 && (nbytes & (nbytes - 1)), "nbytes must be a binary power at least 4"
+    nums = test_inputs_four_bytes()
+    q = nbytes / 4;
+    return itertools.product(nums, repeat = q)
 
 def generate_everything():
     print('Generating input arguments... ', end='', flush=True)
     t = timer()
-    xs = generate_interesting_numbers()
+    xs = test_inputs()
     ys = xs
     t = timer() - t
     print('done ({:.2f}s). Created {} arguments.'.format(t, len(xs)))
@@ -85,11 +109,10 @@ def generate_everything():
     ops = {
         'add_cy': (operator.add, xs, ys),
         'sub_br': (sub_br, xs, ys),
-        'mul_wide': (operator.mul, xs, ys)
+        'mul_wide': (mul_wide, xs, ys)
     }
-
     return list(map(mktests, ops.keys(), ops.values()))
 
 if __name__ == '__main__':
     generate_everything()
-    mkmodexptests('modexp')
+#    mkmodexptests('modexp')
