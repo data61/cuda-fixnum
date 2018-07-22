@@ -269,7 +269,7 @@ uquorem_reciprocal(uint32_t d)
     e = -(v1 * d31) + ((v1 >> 1) & d0_mask);
     umul_hi(t0, v1, e);
     v2 = (v1 << 15) + (t0 >> 1); // 33 bits (hi bit is implicit)
-    umul_wide(t1, t0, v2, d);
+    umul(t1, t0, v2, d);
     t1 += d + ((t0 + d) < d);
     v3 = v2 - t1; // 33 bits (hi bit is implicit)
     return v3;
@@ -358,7 +358,7 @@ uquorem_reciprocal(uint64_t d)
     e = -(v2 * d63) + ((v1 >> 1) & d0_mask);
     umul_hi(t0, v2, e);
     v3 = (v2 << 31) + (t0 >> 1);  // 65 bits (hi bit is implicit)
-    umul_wide(t1, t0, v3, d);
+    umul(t1, t0, v3, d);
     t1 += d + ((t0 + d) < d);
     v4 = v3 - t1;   // 65 bits (hi bit is implicit)
     return v4;
@@ -388,7 +388,6 @@ uquorem_wide(
 {
     static_assert(std::is_unsigned<uint_tp>::value == true,
                   "template type must be unsigned");
-    static constexpr int WORD_BITS = sizeof(uint_tp)*8;
     if (u_hi > d) {
         q = r = (uint_tp)-1;
         return;
@@ -396,7 +395,7 @@ uquorem_wide(
 
     uint_tp q_hi, q_lo, mask;
 
-    umul_wide(q_hi, q_lo, u_hi, v);
+    umul(q_hi, q_lo, u_hi, v);
     q_lo += u_lo;
     q_hi += u_hi + (q_lo < u_lo) + 1;
     r = u_lo - q_hi * d;
