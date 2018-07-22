@@ -1,9 +1,29 @@
 #pragma once
 
-#include "util/managed.cu"
 #include "util/primitives.cu"
 #include "functions/monty_mul.cu"
+#include "functions/multi_modexp.cu"
 
+template< typename fixnum_impl >
+class modexp {
+public:
+    typedef typename fixnum_impl::fixnum fixnum;
+
+    __device__ modexp(fixnum mod, fixnum exp_)
+        : mexp(mod), exp(exp_) { }
+
+    __device__ void operator()(fixnum &z, fixnum x) const {
+        mexp(z, x, exp);
+    }
+
+private:
+    const multi_modexp<fixnum_impl> mexp;
+    fixnum exp;
+};
+
+
+// TODO: Fix the exponent scanning code so I can reenable this!
+#if 0
 // FIXME: This belongs elsewhere. Perhaps I should have a "host word" typedef
 // for this sort of thing?
 typedef unsigned long ulong;
@@ -12,9 +32,8 @@ typedef unsigned long ulong;
 // See https://stackoverflow.com/a/4589384
 static constexpr int ULONG_BITS = sizeof(ulong) * 8;
 
-
 template< typename fixnum_impl >
-class modexp : public managed {
+class modexp {
     static constexpr int WIDTH = fixnum_impl::SLOT_WIDTH;
 
     // TODO: These should be determined by the exponent. Current choices
@@ -68,12 +87,7 @@ public:
      * NB: It is assumed that the caller has reduced exp and mod using knowledge
      * of their properties (e.g. reducing exp modulo phi(mod), CRT, etc.).
      */
-    modexp(const uint8_t *mod, size_t modbytes, const uint8_t *exp, size_t expbytes);
-
-    ~modexp() {
-        if (exp_decomp_len)
-            cuda_free(exp_decomp);
-    }
+    modexp(fixnum mod, fixnum exp);
 
     __device__ void operator()(fixnum &z, fixnum x) const;
 };
@@ -264,3 +278,4 @@ modexp<fixnum_impl>::operator()(fixnum &z, fixnum x) const
     }
     monty.from_monty(z, z);
 }
+#endif
