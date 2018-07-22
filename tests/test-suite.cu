@@ -262,7 +262,7 @@ TYPED_TEST(TypedPrimitives, add_cy) {
     vector<binop_args> tcases;
     set_args_from_tcases("tests/add_cy", tcases, res, xs, ys);
 
-    fixnum_array::template map_new<add_cy>(res, xs, ys);
+    fixnum_array::template map<add_cy>(res, xs, ys);
 
     // FIXME: check for carries
     check_result(tcases, res);
@@ -289,7 +289,7 @@ TYPED_TEST(TypedPrimitives, sub_br) {
     vector<binop_args> tcases;
     set_args_from_tcases("tests/sub_br", tcases, res, xs, ys);
 
-    fixnum_array::template map_new<sub_br>(res, xs, ys);
+    fixnum_array::template map<sub_br>(res, xs, ys);
 
     // FIXME: check for borrows
     check_result(tcases, res);
@@ -316,7 +316,7 @@ TYPED_TEST(TypedPrimitives, mul_lo) {
     vector<binop_args> tcases;
     set_args_from_tcases("tests/mul_wide", tcases, res, xs, ys);
 
-    fixnum_array::template map_new<mul_lo>(res, xs, ys);
+    fixnum_array::template map<mul_lo>(res, xs, ys);
 
     check_result(tcases, res);
     delete res;
@@ -346,7 +346,7 @@ TYPED_TEST(TypedPrimitives, mul_wide) {
 
     // C++ sucks:
     // https://stackoverflow.com/questions/610245/where-and-why-do-i-have-to-put-the-template-and-typename-keywords
-    fixnum_array::template map_new< mul_wide >(his, los, xs, ys);
+    fixnum_array::template map< mul_wide >(his, los, xs, ys);
 
     check_result(tcases, {los, his});
     delete his;
@@ -407,37 +407,58 @@ set_fixnum_array(fixnum_array<fixnum_impl> *&xs, Iter begin, Iter end)
     }
 }
 
+template< typename fixnum_impl >
+struct my_modexp {
+    typedef typename fixnum_impl::fixnum fixnum;
+
+    __device__ void operator()(fixnum &z, fixnum x, fixnum m, fixnum e) {
+        modexp<fixnum_impl> me(m, e);
+        me(z, x);
+    };
+};
+
 TYPED_TEST(TypedPrimitives, modexp) {
     typedef typename TestFixture::fixnum_impl fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
     static constexpr size_t FIXNUM_BYTES = fixnum_impl::FIXNUM_BYTES;
 
-    fixnum_array *res, *xs;
+    fixnum_array *res, *xs, *exps, *mods;
     vector<tcase_args> tcases = set_args_modexp("tests/modexp");
 
     // Each tcase is [n, e, *xs, *res], so len(xs) = len(res) = (size - 2)/2
     int arglen = tcases[0].size();
     die_if(arglen & 1, "args length should be even");
-    int n = (arglen - 2) / 2;
+    int nxs = (arglen - 2) / 2, n = nxs;
+    n = nxs;  // Set to < nxs to limit number of tests run.
     res = fixnum_array::create(n);
     xs = fixnum_array::create(n);
+    exps = fixnum_array::create(n);
+    mods = fixnum_array::create(n);
 
     int nskipped = 0;
     for (const tcase_args &args : tcases) {
         const byte_array &mod = args[0], &exp = args[1];
 
-        if (mod.size() > FIXNUM_BYTES) {
+        if (mod.size() > FIXNUM_BYTES || !(mod[0] & 1)
+            || exp.size() > FIXNUM_BYTES) {
             ++nskipped;
             continue;
         }
+
         auto first_x = args.begin() + 2;
         set_fixnum_array(xs, first_x, first_x + n);
 
-        auto fn = new modexp<fixnum_impl>(
-            mod.data(), mod.size(), exp.data(), exp.size());
-        fixnum_array::map(fn, res, xs);
-        delete fn;
-        auto first_res = first_x + n;
+        // TODO: exps (resp. mods) should be a fixnum_array of
+        // "length" n, where every element is exp (resp. mod); i.e. a
+        // "constant" fixnum array.
+        for (int i = 0; i < n; ++i) {
+            exps->set(i, exp.data(), exp.size());
+            mods->set(i, mod.data(), mod.size());
+        }
+
+        fixnum_array::template map<my_modexp>(res, xs, mods, exps);
+
+        auto first_res = first_x + nxs;
         check_result(res, first_res, first_res + n);
     }
     int ntests = tcases.size();
@@ -447,6 +468,8 @@ TYPED_TEST(TypedPrimitives, modexp) {
 
     delete res;
     delete xs;
+    delete exps;
+    delete mods;
 }
 
 int main(int argc, char *argv[])
