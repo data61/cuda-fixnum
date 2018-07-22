@@ -1,30 +1,15 @@
 #pragma once
 
-#include "util/managed.cu"
 #include "util/primitives.cu"
-#include "util/gmp_utils.h"
+#include "functions/modinv.cu"
+#include "functions/quorem_preinv.cu"
 
 template< typename fixnum_impl >
-class monty_mul : public managed {
-    typedef typename fixnum_impl::word_tp word_tp;
-    static constexpr int WIDTH = fixnum_impl::SLOT_WIDTH;
-
-    // FIXME: These definitions assume that fixnum_impl is the default classical
-    // implementation!! They should be set with a generic set method.
-
-    // Modulus for Monty arithmetic
-    word_tp mod[WIDTH];
-    // R = 2^FIXNUM_BITS % mod
-    word_tp R_mod[WIDTH];
-    // Rsqr = R^2 % mod
-    word_tp R_sqr_mod[WIDTH];
-    // inv_mod * mod = -1 % 2^DIGIT_BITS.
-    word_tp  inv_mod;
-
+class monty_mul {
 public:
     typedef typename fixnum_impl::fixnum fixnum;
 
-    monty_mul(const uint8_t *modulus, size_t modulus_bytes);
+    __device__ monty_mul(fixnum modulus);
 
     /**
      * z <- x * y
@@ -42,7 +27,7 @@ public:
     // TODO: Might be worth specialising monty_mul for this case, since one of
     // the operands is known.
     __device__ void to_monty(fixnum &z, fixnum x) const {
-        (*this)(z, x, fixnum_impl::load(R_sqr_mod));
+        (*this)(z, x, Rsqr_mod);
     }
 
     // TODO: Might be worth specialising monty_mul for this case, since one of
@@ -55,56 +40,61 @@ public:
      * Return the Montgomery image of one.
      */
     __device__ fixnum one() const {
-        return fixnum_impl::load(R_mod);
+        return R_mod;
     }
 
 private:
+    typedef typename fixnum_impl::word_tp word_tp;
+    // TODO: Check whether we can get rid of this declaration
+    static constexpr int WIDTH = fixnum_impl::SLOT_WIDTH;
+
+    // Modulus for Monty arithmetic
+    fixnum mod;
+    // R_mod = 2^FIXNUM_BITS % mod
+    fixnum R_mod;
+    // Rsqr = R^2 % mod
+    fixnum Rsqr_mod;
+    // inv_mod * mod = -1 % 2^WORD_BITS.
+    word_tp  inv_mod;
+
+    // TODO: We save this after using it in the constructor; work out
+    // how to make it available for later use. For example, it could
+    // be used to reduce arguments to modexp prior to the main
+    // iteration.
+    quorem_preinv<fixnum_impl> modrem;
+
     __device__ void normalise(fixnum &x, int msb, fixnum m) const;
 };
 
 
-// TODO: These two functions should be in a utilities file. Also, they are
-// specific to the default classical number representation.
-
-/*
- * Return 1 if x is even, 0 if it is odd.
- */
-template<typename digit_t>
-int
-is_even(digit_t x) { return !(x & 1); }
-
-/*
- * Return 1 if the n digit number x is even or equal to one (1), 0
- * otherwise (ie. odd > 1).
- */
-template<typename digit_t>
-int
-is_even_or_one(const digit_t *x, int n)
-{
-    // x is 0 or even:
-    if (n == 0 || is_even(x[0])) return 1;
-    // x is odd > 1
-    if (x[0] > 1) return 0;
-    // x = 1 iff we don't find a non-zero word
-    int i = 1;
-    for (; i < n; ++i)
-        if (x[i]) break;
-    return i == n;
-}
-
 template< typename fixnum_impl >
-monty_mul<fixnum_impl>::monty_mul(const uint8_t *modulus, size_t modulus_bytes)
+__device__
+monty_mul<fixnum_impl>::monty_mul(fixnum modulus)
+: mod(modulus), modrem(modulus)
 {
-    // FIXME: It should probably be an error to provide a modulus that's too
-    // big.
-    size_t nbytes = std::min((size_t)fixnum_impl::FIXNUM_BYTES, modulus_bytes);
     // mod must be odd > 1 in order to calculate R^-1 mod "mod".
-    // FIXME: Handle this error properly
-    assert( ! is_even_or_one(modulus, nbytes));
-    memset(mod, 0, sizeof(word_tp) * WIDTH);
-    memcpy(mod, modulus, nbytes);
-    get_R_and_Rsqr_mod<WIDTH>(R_mod, R_sqr_mod, modulus, nbytes);
-    inv_mod = get_invmod(modulus, nbytes, fixnum_impl::WORD_BITS);
+    // FIXME: Handle these errors properly
+    assert(fixnum_impl::two_valuation(modulus) == 0);
+    assert(fixnum_impl::cmp(modulus, fixnum_impl::one()) != 0);
+
+    fixnum Rsqr_hi, Rsqr_lo;
+    int L = fixnum_impl::slot_layout::laneIdx();
+
+    // R_mod = R % mod
+    modrem(R_mod, fixnum_impl::one(), fixnum_impl::zero());
+    fixnum_impl::sqr_wide(Rsqr_hi, Rsqr_lo, R_mod);
+    // Rsqr_mod = R^2 % mod
+    modrem(Rsqr_mod, Rsqr_hi, Rsqr_lo);
+
+    // TODO: Tidy this up.
+    modinv<fixnum_impl> minv;
+    minv(inv_mod, mod, fixnum_impl::WORD_BITS);
+    inv_mod = -inv_mod;
+    // TODO: Ugh.
+    typedef typename fixnum_impl::slot_layout slot_layout;
+    // TODO: Can we avoid this broadcast?
+    inv_mod = slot_layout::shfl(inv_mod, 0);
+    assert(1 + inv_mod * slot_layout::shfl(mod, 0) == 0);
 }
 
 /*
@@ -121,7 +111,6 @@ monty_mul<fixnum_impl>::operator()(fixnum &z, fixnum x, fixnum y) const
     typedef typename fixnum_impl::slot_layout slot_layout;
 
     int L = slot_layout::laneIdx();
-    const fixnum mod = fixnum_impl::load(this->mod);
     const word_tp tmp = x * fixnum_impl::get(y, 0) * inv_mod;
     word_tp cy = 0;
     z = 0;
@@ -140,7 +129,6 @@ monty_mul<fixnum_impl>::operator()(fixnum &z, fixnum x, fixnum y) const
         assert(L || !z);  // z[0] must be 0
         z = slot_layout::shfl_down0(z, 1); // Shift right one word
 
-        //UADDC(z, cy, z, cy)
         z += cy;
         cy = z < cy;
 
@@ -148,7 +136,7 @@ monty_mul<fixnum_impl>::operator()(fixnum &z, fixnum x, fixnum y) const
         umad_hi_cc(z, cy, y, xi, z);
     }
     // Resolve carries
-    word_tp msw = fixnum_impl::most_sig_dig(cy);
+    word_tp msw = fixnum_impl::top_digit(cy);
     cy = slot_layout::shfl_up0(cy, 1); // left shift by 1
     msw += fixnum_impl::add_cy(z, z, cy);
     assert(msw == !!msw); // msw = 0 or 1.
