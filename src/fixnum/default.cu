@@ -26,6 +26,7 @@ public:
     typedef word_tp_ word_tp;
     static constexpr int WORD_BITS = 8 * sizeof(word_tp_);
     static constexpr int FIXNUM_BYTES = FIXNUM_BYTES_;
+    static constexpr int FIXNUM_BITS = 8 * FIXNUM_BYTES;
     static constexpr int SLOT_WIDTH = FIXNUM_BYTES_ / sizeof(word_tp_);
     // FIXME: slot_layout should not be exposed by this interface.
     typedef slot_layout< SLOT_WIDTH > slot_layout;
@@ -102,13 +103,23 @@ public:
     }
 
     /*
-     * Return most significant digit.
+     * Return digit in most significant place. Might be zero.
      *
-     * FIXME: Not clear how to interpret this function with more exotic fixnum
+     * TODO: Not clear how to interpret this function with more exotic fixnum
      * implementations such as RNS.
      */
-    __device__ static fixnum most_sig_dig(fixnum var) {
+    __device__ static fixnum top_digit(fixnum var) {
         return slot_layout::shfl(var, slot_layout::toplaneIdx);
+    }
+
+    /*
+     * Return digit in the least significant place. Might be zero.
+     *
+     * TODO: Not clear how to interpret this function with more exotic fixnum
+     * implementations such as RNS.
+     */
+    __device__ static fixnum bottom_digit(fixnum var) {
+        return slot_layout::shfl(var, 0);
     }
 
     /***********************
@@ -116,6 +127,11 @@ public:
      */
 
     // TODO: Handle carry in
+    // TODO: A more consistent syntax might be
+    // fixnum add(fixnum a, fixnum b)
+    // fixnum add_cc(fixnum a, fixnum b, int &cy_out)
+    // fixnum addc(fixnum a, fixnum b, int cy_in)
+    // fixnum addc_cc(fixnum a, fixnum b, int cy_in, int &cy_out)
     __device__ static int add_cy(fixnum &r, fixnum a, fixnum b) {
         // FIXME: Can't call std::numeric_limits<fixnum>::max() on device.
         //static constexpr fixnum FIXNUM_MAX = std::numeric_limits<fixnum>::max();
@@ -155,6 +171,10 @@ public:
         return sub_br(r, r, one());
     }
 
+    __device__ static void neg(fixnum &r, fixnum a) {
+        (void) sub_br(r, zero(), a);
+    }
+
     /*
      * r += a * u.
      *
@@ -165,13 +185,31 @@ public:
         fixnum cy_hi, hi;
 
         umad(hi, r, a, u, r);
-        cy_hi = most_sig_dig(hi);
+        cy_hi = top_digit(hi);
         hi = slot_layout::shfl_up0(hi, 1);
         cy_hi += add_cy(r, hi, r);
 
         return cy_hi;
     }
 
+    /*
+     * r = a * u, where a is interpreted as a single word, and u a
+     * full fixnum. a should be constant across the slot for the
+     * result to make sense.
+     *
+     * TODO: Can this be refactored with mad_cy?
+     * TODO: Come up with a better name for this function.
+     */
+    __device__ static word_tp muli(fixnum &r, word_tp a, fixnum u) {
+        fixnum cy_hi, hi, lo;
+
+        umul(hi, lo, a, u);
+        cy_hi = top_digit(hi);
+        hi = slot_layout::shfl_up0(hi, 1);
+        cy_hi += add_cy(lo, lo, hi);
+
+        return cy_hi;
+    }
 
     /*
      * r = lo_half(a * b)
@@ -199,6 +237,11 @@ public:
         }
         cy = slot_layout::shfl_up0(cy, 1);
         add_cy(r, r, cy);
+    }
+
+    __device__ static void sqr_lo(fixnum &r, fixnum a) {
+        // TODO: Implement my smarter squaring algo.
+        mul_lo(r, a, a);
     }
 
     /*
@@ -255,6 +298,23 @@ public:
         assert(cy == 0);
     }
 
+    __device__ static void mul_hi(fixnum &s, fixnum a, fixnum b) {
+        // TODO: implement this properly
+        fixnum r;
+        mul_wide(s, r, a, b);
+    }
+
+    __device__ static void sqr_wide(fixnum &s, fixnum &r, fixnum a) {
+        // TODO: Implement my smarter squaring algo.
+        mul_wide(s, r, a, a);
+    }
+
+    __device__ static void sqr_hi(fixnum &s, fixnum a) {
+        // TODO: implement this properly
+        fixnum r;
+        sqr_wide(s, r, a);
+    }
+
     /*
      * Return a mask of width bits whose ith bit is set if and only if
      * the ith digit of r is nonzero. In particular, result is zero
@@ -276,22 +336,102 @@ public:
     }
 
     /*
-     * Return the index of the most significant bit of x, or -1 if x is
+     * Return the index of the most significant digit of x, or -1 if x is
      * zero.
      */
-    __device__ static int msb(fixnum x) {
+    __device__ static int most_sig_dig(fixnum x) {
         // FIXME: Should be able to get this value from limits or numeric_limits
         // or whatever.
         enum { UINT32_BITS = 8 * sizeof(uint32_t) };
         static_assert(UINT32_BITS == 32, "uint32_t isn't 32 bits");
 
         uint32_t a = nonzero_mask(x);
-        // b is the index of the first non-zero word, or -1 if x is zero.
-        int b = UINT32_BITS - (clz(a) + 1);
+        return UINT32_BITS - (clz(a) + 1);
+    }
+
+    /*
+     * Return the index of the most significant bit of x, or -1 if x is
+     * zero.
+     *
+     * TODO: Give this function a better name; maybe ceil_log2()?
+     */
+    __device__ static int msb(fixnum x) {
+        int b = most_sig_dig(x);
         if (b < 0) return b;
         word_tp y = slot_layout::shfl(x, b);
+        // TODO: These two lines are basically the same as most_sig_dig();
+        // refactor.
         int c = clz(y);
         return WORD_BITS - (c + 1) + WORD_BITS * b;
+    }
+
+    /*
+     * Return the 2-valuation of x, i.e. the integer k >= 0 such that
+     * 2^k divides x but 2^(k+1) does not divide x.  Depending on the
+     * representation, can think of this as CTZ(x) ("Count Trailing
+     * Zeros").
+     *
+     * TODO: Refactor common code between here, msb() and
+     * most_sig_dig(). Perhaps write msb in terms of two_valuation?
+     */
+    __device__ static int two_valuation(fixnum x) {
+        // FIXME: Should be able to get this value from limits or numeric_limits
+        // or whatever.
+        enum { UINT32_BITS = 8 * sizeof(uint32_t) };
+        static_assert(UINT32_BITS == 32, "uint32_t isn't 32 bits");
+
+        uint32_t a = nonzero_mask(x);
+        int b = ctz(a), c = 0;
+        if (b < UINT32_BITS) {
+            word_tp y = slot_layout::shfl(x, b);
+            c = ctz(y);
+        }
+        return c + b * WORD_BITS;
+    }
+
+    /*
+     * Set y to be x shifted by b bits to the left; effectively
+     * multiply by 2^b. Return the top b bits of x.
+     *
+     * FIXME: Currently assumes that fixnum is unsigned.
+     *
+     * TODO: Think of better names for these functions. Something like
+     * mul_2exp.
+     */
+    __device__ static fixnum lshift(fixnum &y, fixnum x, int b) {
+        assert(b >= 0);
+        assert(b <= FIXNUM_BITS);
+        int q = b / WORD_BITS, r = b % WORD_BITS, rp = WORD_BITS - r;
+        fixnum overflow;
+
+        y = slot_layout::rotate_up(x, q);
+        // Hi bits of y[i] (=overflow) become the lo bits of y[(i+1) % width]
+        overflow = y >> rp;
+        overflow = slot_layout::rotate_up(overflow, 1);
+        y = (y << r) | overflow;
+
+        int L = slot_layout::laneIdx();
+        overflow = y & -(word_tp)(L <= q);   // Kill high (q-1) words of y;
+        set(overflow, (overflow << rp) >> rp, q); // Kill high rp bits of overflow[q]
+        y &= -(word_tp)(L >= q);             // Kill low q words of y;
+        set(y, (y >> r) << r, q);            // Kill low r bits of y[q]
+        return overflow;
+    }
+
+    /*
+     * Set y to be x shifted by b bits to the right; effectively
+     * divide by 2^b. Return the bottom b bits of x.
+     *
+     * FIXME: Currently assumes 0 <= b <= WORD_BITS, and that fixnum
+     * is unsigned.
+     *
+     * TODO: Think of better names for these functions. Something like
+     * mul_2exp.
+     */
+    __device__ static fixnum rshift(fixnum &y, fixnum x, int b) {
+        fixnum z;
+        y = lshift(z, x, FIXNUM_BITS - b);
+        return z;
     }
 
 private:
