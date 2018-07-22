@@ -26,9 +26,11 @@ struct modinv {
         fixnum b0 = fixnum_impl::get(b, 0);
         assert(k > 0 && k <= FIXNUM_BITS);
 
-        fixnum binv = modinv_2k(b0, WORD_BITS);
+        fixnum binv = modinv_2k(b0);
         x = 0;
         fixnum_impl::set(x, binv, 0);
+        if (k < WORD_BITS)
+            x &= (1UL << k) - 1UL;
         if (k <= WORD_BITS)
             return;
 
