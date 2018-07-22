@@ -1,91 +1,54 @@
 from itertools import chain, product
-from collections import Iterable, deque
+from collections import deque
 from timeit import default_timer as timer
-import operator
 
-OPEN_PAREN = b'('
-CLOSE_PAREN = b')'
-LEN_DELIMIT = b':'
-LEN_BASE = 'd'
+def write_int(dest, sz, n):
+    dest.write(n.to_bytes(sz, byteorder = 'little'))
 
-def iceildiv(n, d):
-    """Return ceil(n / d) as an integer."""
-    return (n + d - 1) // d
+def write_vector(dest, elt_sz, v):
+    for n in v:
+        write_int(dest, elt_sz, n)
 
-def write_atom(dest, atom):
-    if isinstance(atom, int):
-        atom = atom.to_bytes(iceildiv(atom.bit_length(), 8), 'little')
-    dest.write(bytes(format(len(atom), LEN_BASE), encoding='ascii'))
-    dest.write(LEN_DELIMIT)
-    dest.write(atom)
+def mktests(op, xs, bits):
+    ys = deque(xs)
+    res = []
+    for i in range(len(xs)):
+        yield zip(*[op(x, y, bits) for x, y in zip(xs, ys)])
+        ys.rotate(1)
 
-def write_list(dest, lst):
-    dest.write(OPEN_PAREN)
-    for el in lst:
-        if isinstance(el, Iterable):
-            write_list(dest, el)
-        else:
-            write_atom(dest, el)
-    dest.write(CLOSE_PAREN)
-
-def modexp_tests(xs, ns, es):
-    return [[n, e]
-            + [x % n for x in xs]
-            + [pow(x, e, n) for x in xs]
-            for n, e in product(ns, es) if n > 2 and n % 2 == 1]
-
-def mkmodexptests(fname):
-    xs = generate_interesting_numbers()
-    t = timer()
-    print('Writing {} tests into "{}"... '.format(len(xs)**3, fname), end='', flush=True)
-    with open(fname, 'wb') as f:
-        write_list(f, modexp_tests(xs, xs, xs))
-    t = timer() - t
-    print('done ({:.2f}s).'.format(t))
-    return fname
-
-
-def mktests(fname, arg):
+def write_tests(fname, arg):
     op, xs, bits = arg
     t = timer()
     print('Writing {} tests into "{}"... '.format(len(xs)**2, fname), end='', flush=True)
     with open(fname, 'wb') as f:
-        f.write(bits >> 3)
-        f.write(len(xs))
-        f.write(2) # How many output values?
-        f.write(xs)
-        f.write(op(xs, bits))
+        fixnum_bytes = bits >> 3
+        vec_len = len(xs)
+        nvecs = 2 # number of output values
+        write_int(f, 4, fixnum_bytes)
+        write_int(f, 4, vec_len)
+        write_int(f, 4, nvecs)
+        write_vector(f, fixnum_bytes, xs)
+        for v in mktests(op, xs, bits):
+            v = list(v)
+            assert len(v) == nvecs, 'bad result length'
+            for res in v:
+                write_vector(f, fixnum_bytes, res)
     t = timer() - t
     print('done ({:.2f}s).'.format(t))
     return fname
 
-def add_cy(xs, bits):
-    ys = deque(xs)
-    res = []
-    for i in range(len(xs)):
-        ys.rotate(1)
-        res.append(zip(*[[(x + y) & ((1<<bits) - 1), (x + y) >> bits] for x, y in zip(xs, ys)]))
-    return res
+def add_cy(x, y, bits):
+    return [(x + y) & ((1<<bits) - 1), (x + y) >> bits]
 
-def sub_br(xs, bits):
-    ys = deque(xs)
-    res = []
-    for i in range(len(xs)):
-        ys.rotate(1)
-        res.append(zip(*[[(x - y) & ((1<<bits) - 1), int(x < y)] for x, y in zip(xs, ys)]))
-    return res
+def sub_br(x, y, bits):
+    return [(x - y) & ((1<<bits) - 1), int(x < y)]
 
-def mul_wide(xs, bits):
-    ys = deque(xs)
-    res = []
-    for i in range(len(xs)):
-        ys.rotate(1)
-        res.append(zip(*[[(x * y) & ((1<<bits) - 1), (x * y) >> bits] for x, y in zip(xs, ys)]))
-    return res
+def mul_wide(x, y, bits):
+    return [(x * y) & ((1<<bits) - 1), (x * y) >> bits]
 
 def test_inputs_four_bytes():
     nums = [1, 2, 3];
-    nums.extend([2^32 - n for n in nums])
+    nums.extend([2**32 - n for n in nums])
     nums.extend([0xFF << i for i in range(4)])
     nums.extend([0, 0xFFFF, 0xFFFF0000, 0xFF00FF00, 0xFF00FF, 0xF0F0F0F0, 0x0F0F0F0F])
     #nums.extend([1 << i for i in range(32)])
@@ -93,26 +56,33 @@ def test_inputs_four_bytes():
     return nums
 
 def test_inputs(nbytes):
-    assert nbytes >= 4 && (nbytes & (nbytes - 1)), "nbytes must be a binary power at least 4"
+    assert nbytes >= 4 and (nbytes & (nbytes - 1)) == 0, "nbytes must be a binary power at least 4"
     nums = test_inputs_four_bytes()
-    q = nbytes / 4;
-    return itertools.product(nums, repeat = q)
+    q = nbytes // 4
+    res = []
+    for t in product(nums, repeat = q):
+        n = 0
+        for i, ti in enumerate(t):
+            n += ti << (i*32)
+        res.append(n)
+    return res
 
-def generate_everything():
+def generate_everything(nbytes):
     print('Generating input arguments... ', end='', flush=True)
+    bits = nbytes * 8
+
     t = timer()
-    xs = test_inputs()
-    ys = xs
+    xs = test_inputs(nbytes)
     t = timer() - t
     print('done ({:.2f}s). Created {} arguments.'.format(t, len(xs)))
 
     ops = {
-        'add_cy': (operator.add, xs, ys),
-        'sub_br': (sub_br, xs, ys),
-        'mul_wide': (mul_wide, xs, ys)
+        'add_cy': (add_cy, xs, bits),
+        'sub_br': (sub_br, xs, bits),
+        'mul_wide': (mul_wide, xs, bits)
     }
-    return list(map(mktests, ops.keys(), ops.values()))
+    fnames = map(lambda fn: fn + '_' + str(nbytes), ops.keys())
+    return list(map(write_tests, fnames, ops.values()))
 
 if __name__ == '__main__':
-    generate_everything()
-#    mkmodexptests('modexp')
+    generate_everything(8)
