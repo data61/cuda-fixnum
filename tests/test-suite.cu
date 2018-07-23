@@ -295,6 +295,27 @@ void check_result(
     check_result(tcases, {arg});
 }
 
+template< typename fixnum_impl, typename tcase_iter >
+void check_result_new(
+    tcase_iter &tcase, uint32_t vec_len,
+    initializer_list<const fixnum_array<fixnum_impl> *> args,
+    int skip = 1)
+{
+    static constexpr int fixnum_bytes = fixnum_impl::FIXNUM_BYTES;
+    size_t nbytes = fixnum_bytes * vec_len;
+    uint8_t *buf = new uint8_t[nbytes];
+
+    for (auto arg : args) {
+        int n;
+        const uint8_t *expected = tcase->data();
+        arg->retrieve_all(buf, nbytes, &n);
+        EXPECT_EQ(n, vec_len);
+        EXPECT_TRUE(arrays_are_equal(expected, nbytes, buf, nbytes));
+        tcase += skip;
+    }
+    delete[] buf;
+}
+
 template< typename fixnum_impl >
 struct add_cy {
     typedef typename fixnum_impl::fixnum fixnum;
@@ -308,41 +329,25 @@ struct add_cy {
 TYPED_TEST(TypedPrimitives, add_cy) {
     typedef typename TestFixture::fixnum_impl fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
-    static constexpr int fixnum_bytes = fixnum_impl::FIXNUM_BYTES;
 
-    fixnum_array *res, *cys, *xs, *ys;
+    fixnum_array *res, *cys, *xs;
     vector<byte_array> tcases;
 
     read_tcases(tcases, xs, "tests/add_cy");
-    res = fixnum_array::create(xs->length());
-    cys = fixnum_array::create(xs->length());
-
     int vec_len = xs->length();
-    size_t nbytes = fixnum_bytes * vec_len;
-    uint8_t *buf = new uint8_t[nbytes];
+    res = fixnum_array::create(vec_len);
+    cys = fixnum_array::create(vec_len);
 
+    auto tcase = tcases.begin();
     for (int i = 0; i < vec_len; ++i) {
-        const uint8_t *expected;
-        int n;
-        ys = xs->rotate(i);
+        fixnum_array *ys = xs->rotate(i);
         fixnum_array::template map<add_cy>(res, cys, xs, ys);
-
-        expected = tcases.at(2*i).data();
-        res->retrieve_all(buf, nbytes, &n);
-        EXPECT_EQ(n, vec_len);
-        EXPECT_TRUE(arrays_are_equal(expected, nbytes, buf, nbytes));
-
-        expected = tcases.at(2*i + 1).data();
-        cys->retrieve_all(buf, nbytes, &n);
-        EXPECT_EQ(n, vec_len);
-        EXPECT_TRUE(arrays_are_equal(expected, nbytes, buf, nbytes));
-
+        check_result_new(tcase, vec_len, {res, cys});
         delete ys;
     }
     delete res;
     delete cys;
     delete xs;
-    delete[] buf;
 }
 
 
@@ -350,8 +355,9 @@ template< typename fixnum_impl >
 struct sub_br {
     typedef typename fixnum_impl::fixnum fixnum;
 
-    __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
-        fixnum_impl::sub_br(r, a, b);
+    __device__ void operator()(fixnum &r, fixnum &br, fixnum a, fixnum b) {
+        int bb = fixnum_impl::sub_br(r, a, b);
+        br = (fixnum_impl::slot_layout::laneIdx() == 0) ? bb : 0;
     }
 };
 
@@ -359,19 +365,25 @@ TYPED_TEST(TypedPrimitives, sub_br) {
     typedef typename TestFixture::fixnum_impl fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
 
-    fixnum_array *res, *xs, *ys;
-    vector<binop_args> tcases;
-    set_args_from_tcases("tests/sub_br", tcases, res, xs, ys);
+    fixnum_array *res, *brs, *xs;
+    vector<byte_array> tcases;
 
-    fixnum_array::template map<sub_br>(res, xs, ys);
+    read_tcases(tcases, xs, "tests/sub_br");
+    int vec_len = xs->length();
+    res = fixnum_array::create(vec_len);
+    brs = fixnum_array::create(vec_len);
 
-    // FIXME: check for borrows
-    check_result(tcases, res);
+    auto tcase = tcases.begin();
+    for (int i = 0; i < vec_len; ++i) {
+        fixnum_array *ys = xs->rotate(i);
+        fixnum_array::template map<sub_br>(res, brs, xs, ys);
+        check_result_new(tcase, vec_len, {res, brs});
+        delete ys;
+    }
     delete res;
+    delete brs;
     delete xs;
-    delete ys;
 }
-
 
 template< typename fixnum_impl >
 struct mul_lo {
@@ -386,16 +398,53 @@ TYPED_TEST(TypedPrimitives, mul_lo) {
     typedef typename TestFixture::fixnum_impl fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
 
-    fixnum_array *res, *xs, *ys;
-    vector<binop_args> tcases;
-    set_args_from_tcases("tests/mul_wide", tcases, res, xs, ys);
+    fixnum_array *res, *xs;
+    vector<byte_array> tcases;
 
-    fixnum_array::template map<mul_lo>(res, xs, ys);
+    read_tcases(tcases, xs, "tests/mul_wide");
+    int vec_len = xs->length();
+    res = fixnum_array::create(vec_len);
 
-    check_result(tcases, res);
+    auto tcase = tcases.begin();
+    for (int i = 0; i < vec_len; ++i) {
+        fixnum_array *ys = xs->rotate(i);
+        fixnum_array::template map<mul_lo>(res, xs, ys);
+        check_result_new(tcase, vec_len, {res}, 2);
+        delete ys;
+    }
     delete res;
     delete xs;
-    delete ys;
+}
+
+template< typename fixnum_impl >
+struct mul_hi {
+    typedef typename fixnum_impl::fixnum fixnum;
+
+    __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
+        fixnum_impl::mul_hi(r, a, b);
+    }
+};
+
+TYPED_TEST(TypedPrimitives, mul_hi) {
+    typedef typename TestFixture::fixnum_impl fixnum_impl;
+    typedef fixnum_array<fixnum_impl> fixnum_array;
+
+    fixnum_array *res, *xs;
+    vector<byte_array> tcases;
+
+    read_tcases(tcases, xs, "tests/mul_wide");
+    int vec_len = xs->length();
+    res = fixnum_array::create(vec_len);
+
+    auto tcase = tcases.begin() + 1;
+    for (int i = 0; i < vec_len; ++i) {
+        fixnum_array *ys = xs->rotate(i);
+        fixnum_array::template map<mul_hi>(res, xs, ys);
+        check_result_new(tcase, vec_len, {res}, 2);
+        delete ys;
+    }
+    delete res;
+    delete xs;
 }
 
 template< typename fixnum_impl >
@@ -410,23 +459,25 @@ struct mul_wide {
 TYPED_TEST(TypedPrimitives, mul_wide) {
     typedef typename TestFixture::fixnum_impl fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
-    static constexpr bool TRUNCATE = false;
 
-    fixnum_array *his, *los, *xs, *ys;
-    vector<binop_args> tcases;
-    set_args_from_tcases("tests/mul_wide", tcases, los, xs, ys, TRUNCATE);
-    // FIXME: This should be set in set_args_from_tcases somehow.
-    his = fixnum_array::create(tcases.size());
+    fixnum_array *his, *los, *xs;
+    vector<byte_array> tcases;
 
-    // C++ sucks:
-    // https://stackoverflow.com/questions/610245/where-and-why-do-i-have-to-put-the-template-and-typename-keywords
-    fixnum_array::template map< mul_wide >(his, los, xs, ys);
+    read_tcases(tcases, xs, "tests/mul_wide");
+    int vec_len = xs->length();
+    his = fixnum_array::create(vec_len);
+    los = fixnum_array::create(vec_len);
 
-    check_result(tcases, {los, his});
+    auto tcase = tcases.begin();
+    for (int i = 0; i < vec_len; ++i) {
+        fixnum_array *ys = xs->rotate(i);
+        fixnum_array::template map<mul_wide>(his, los, xs, ys);
+        check_result_new(tcase, vec_len, {los, his});
+        delete ys;
+    }
     delete his;
     delete los;
     delete xs;
-    delete ys;
 }
 
 
