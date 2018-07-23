@@ -9,29 +9,39 @@ def write_vector(dest, elt_sz, v):
     for n in v:
         write_int(dest, elt_sz, n)
 
-def mktests(op, xs, bits):
-    ys = deque(xs)
-    res = []
-    for i in range(len(xs)):
-        yield zip(*[op(x, y, bits) for x, y in zip(xs, ys)])
-        ys.rotate(1)
+def mktests(op, xs, nargs, bits):
+    # FIXME: Refactor this.
+    if nargs == 2:
+        ys = deque(xs)
+        for i in range(len(xs)):
+            yield zip(*[op(x, y, bits) for x, y in zip(xs, ys)])
+            ys.rotate(1)
+    elif nargs == 3:
+        ys = deque(xs)
+        zs = deque(xs)
+        for _ in range(len(xs)):
+            for _ in range(len(xs)):
+                yield list(zip(*[op(x, y, z, bits) for x, y, z in zip(xs, ys, zs)]))
+                zs.rotate(1)
+            ys.rotate(1)
+    else:
+        raise NotImplementedError()
 
 def write_tests(fname, arg):
-    op, xs, bits = arg
+    op, xs, nargs, nres, bits = arg
+    vec_len = len(xs)
+    ntests = vec_len**nargs
     t = timer()
-    print('Writing {} tests into "{}"... '.format(len(xs)**2, fname), end='', flush=True)
+    print('Writing {} tests into "{}"... '.format(ntests, fname), end='', flush=True)
     with open(fname, 'wb') as f:
         fixnum_bytes = bits >> 3
-        vec_len = len(xs)
-        # FIXME: Need to get this from op somehow
-        nvecs = 2 # number of output values
         write_int(f, 4, fixnum_bytes)
         write_int(f, 4, vec_len)
-        write_int(f, 4, nvecs)
+        write_int(f, 4, nres)
         write_vector(f, fixnum_bytes, xs)
-        for v in mktests(op, xs, bits):
+        for v in mktests(op, xs, nargs, bits):
             v = list(v)
-            assert len(v) == nvecs, 'bad result length'
+            assert len(v) == nres, 'bad result length; expected {}, got {}'.format(nres, len(v))
             for res in v:
                 write_vector(f, fixnum_bytes, res)
     t = timer() - t
@@ -46,6 +56,12 @@ def sub_br(x, y, bits):
 
 def mul_wide(x, y, bits):
     return [(x * y) & ((1<<bits) - 1), (x * y) >> bits]
+
+def modexp(x, y, z, bits):
+    # FIXME: Handle these cases properly!
+    if z % 2 == 0:
+        return [0]
+    return [pow(x, y, z)]
 
 def test_inputs(nbytes):
     assert nbytes >= 4 and (nbytes & (nbytes - 1)) == 0, "nbytes must be a binary power at least 4"
@@ -79,9 +95,10 @@ def generate_everything(nbytes):
         print('xs = {}'.format(xs))
 
     ops = {
-        'add_cy': (add_cy, xs, bits),
-        'sub_br': (sub_br, xs, bits),
-        'mul_wide': (mul_wide, xs, bits)
+        'add_cy': (add_cy, xs, 2, 2, bits),
+        'sub_br': (sub_br, xs, 2, 2, bits),
+        'mul_wide': (mul_wide, xs, 2, 2, bits),
+        'modexp': (modexp, xs, 3, 1, bits)
     }
     fnames = map(lambda fn: fn + '_' + str(nbytes), ops.keys())
     return list(map(write_tests, fnames, ops.values()))
