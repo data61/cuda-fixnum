@@ -124,7 +124,7 @@ quorem_preinv<fixnum_impl>::operator()(
     fixnum &q, fixnum &r, fixnum A_hi, fixnum A_lo) const
 {
     fixnum t;
-    int cy, L = fixnum_impl::slot_layout::laneIdx();
+    int L = fixnum_impl::slot_layout::laneIdx();
 
     // Normalise A
     // TODO: Rather than normalising A, we should incorporate the
@@ -143,7 +143,7 @@ quorem_preinv<fixnum_impl>::operator()(
     // cy being assigned but not used. Find a better way to avoid the warning
     // than this preprocessor crap.
 #ifndef NDEBUG
-    cy = fixnum_impl::add_cy(q, q, A_hi); // mu has implicit hi bit
+    int cy = fixnum_impl::add_cy(q, q, A_hi); // mu has implicit hi bit
     assert(cy == 0);
 #else
     fixnum_impl::add_cy(q, q, A_hi); // mu has implicit hi bit

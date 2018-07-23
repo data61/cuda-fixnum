@@ -20,11 +20,10 @@ struct modinv {
      * TODO: Calculate this using the multiple inversion trick (MCA 2.5.1)
      */
     __device__ void operator()(fixnum &x, fixnum b, int k) const {
-        static constexpr int FIXNUM_BITS = fixnum_impl::FIXNUM_BYTES * 8;
         static constexpr int WORD_BITS = fixnum_impl::WORD_BITS;
         // b must be odd
         fixnum b0 = fixnum_impl::get(b, 0);
-        assert(k > 0 && k <= FIXNUM_BITS);
+        assert(k > 0 && k <= fixnum_impl::FIXNUM_BYTES * 8);
 
         fixnum binv = modinv_2k(b0);
         x = 0;
