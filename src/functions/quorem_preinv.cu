@@ -139,8 +139,15 @@ quorem_preinv<fixnum_impl>::operator()(
     // approximate answer (see Short Product discussion at MCA,
     // Section 3.3 (from Section 2.4.1, p59)).
     fixnum_impl::mul_wide(q, t, A_hi, mu);
+    // TODO: For some reason (void)cy; does stop the compiler complaining about
+    // cy being assigned but not used. Find a better way to avoid the warning
+    // than this preprocessor crap.
+#ifndef NDEBUG
     cy = fixnum_impl::add_cy(q, q, A_hi); // mu has implicit hi bit
     assert(cy == 0);
+#else
+    fixnum_impl::add_cy(q, q, A_hi); // mu has implicit hi bit
+#endif
 
     quorem<fixnum_impl>::quorem_with_candidate_quotient(q, r, A_hi, A_lo, div, q);
 
