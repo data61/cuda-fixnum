@@ -64,6 +64,28 @@ fixnum_array<fixnum_impl>::create(const uint8_t *data, size_t total_bytes, size_
     return a;
 }
 
+// TODO: Find a way to return a wrapper that just modifies the requested indices
+// on the fly, rather than copying the whole array. Hard part will be making it
+// work with map/dispatch.
+template< typename fixnum_impl >
+fixnum_array<fixnum_impl> *
+fixnum_array<fixnum_impl>::rotate(int i) {
+    fixnum_array *a = create(length());
+    word_tp *p = a->ptr;
+    if (i < 0) {
+        int j = -i;
+        i += nelts * iceil(j, nelts);
+        assert(i >= 0 && i < nelts);
+        i = nelts - i;
+    } else if (i >= nelts)
+        i %= nelts;
+    int pivot = i * FIXNUM_STORAGE_WORDS;
+    int nwords = nelts * FIXNUM_STORAGE_WORDS;
+    std::copy(ptr, ptr + nwords - pivot, p + pivot);
+    std::copy(ptr + nwords - pivot, ptr + nwords, p);
+    return a;
+}
+
 
 template< typename fixnum_impl >
 int
