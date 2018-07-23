@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <initializer_list>
 #include <fstream>
+#include <string>
+#include <sstream>
 #include "sexp.h"
 
 // FIXME FIXME!
@@ -18,7 +20,7 @@
 
 using namespace std;
 
-void die_if(bool p, const char *msg) {
+void die_if(bool p, const string &msg) {
     if (p) {
         cerr << "Error: " << msg << endl;
         abort();
@@ -179,6 +181,54 @@ void set_args_from_tcases(
     }
 }
 
+void read_into(ifstream &file, uint8_t *buf, size_t nbytes) {
+    file.read(reinterpret_cast<char *>(buf), nbytes);
+    die_if( ! file.good(), "Read error.");
+    die_if(static_cast<size_t>(file.gcount()) != nbytes, "Expected more data.");
+}
+
+uint32_t read_int(ifstream &file) {
+    uint32_t res;
+    file.read(reinterpret_cast<char*>(&res), sizeof(res));
+    return res;
+}
+
+template<typename fixnum_impl>
+void read_tcases(
+        vector<byte_array> &res,
+        fixnum_array<fixnum_impl> *&xs,
+        const string &fname) {
+    static constexpr int fixnum_bytes = fixnum_impl::FIXNUM_BYTES;
+    ifstream file(fname + "_" + std::to_string(fixnum_bytes));
+    die_if( ! file.good(), "Couldn't open file.");
+
+    uint32_t fn_bytes, vec_len, noutvecs;
+    fn_bytes = read_int(file);
+    vec_len = read_int(file);
+    noutvecs = read_int(file);
+
+    stringstream ss;
+    ss << "Inconsistent reporting of fixnum bytes. "
+       << "Expected " << fixnum_bytes << " got " << fn_bytes << ".";
+    die_if(fixnum_bytes != fn_bytes, ss.str());
+
+    size_t nbytes = fixnum_bytes * vec_len;
+    uint8_t *buf = new uint8_t[nbytes];
+
+    read_into(file, buf, nbytes);
+    xs = fixnum_array<fixnum_impl>::create(buf, nbytes, fixnum_bytes);
+
+    res.reserve(noutvecs * vec_len);
+    for (uint32_t i = 0; i < vec_len; ++i) {
+        for (uint32_t j = 0; j < noutvecs; ++j) {
+            read_into(file, buf, nbytes);
+            res.emplace_back(buf, buf + nbytes);
+        }
+    }
+
+    delete[] buf;
+}
+
 template< typename fixnum_impl, typename Iter >
 void check_result(
     const fixnum_array<fixnum_impl> *res,
@@ -249,26 +299,50 @@ template< typename fixnum_impl >
 struct add_cy {
     typedef typename fixnum_impl::fixnum fixnum;
 
-    __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
-        fixnum_impl::add_cy(r, a, b);
+    __device__ void operator()(fixnum &r, fixnum &cy, fixnum a, fixnum b) {
+        int c = fixnum_impl::add_cy(r, a, b);
+        cy = (fixnum_impl::slot_layout::laneIdx() == 0) ? c : 0;
     }
 };
 
 TYPED_TEST(TypedPrimitives, add_cy) {
     typedef typename TestFixture::fixnum_impl fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
+    static constexpr int fixnum_bytes = fixnum_impl::FIXNUM_BYTES;
 
-    fixnum_array *res, *xs, *ys;
-    vector<binop_args> tcases;
-    set_args_from_tcases("tests/add_cy", tcases, res, xs, ys);
+    fixnum_array *res, *cys, *xs, *ys;
+    vector<byte_array> tcases;
 
-    fixnum_array::template map<add_cy>(res, xs, ys);
+    read_tcases(tcases, xs, "tests/add_cy");
+    res = fixnum_array::create(xs->length());
+    cys = fixnum_array::create(xs->length());
 
-    // FIXME: check for carries
-    check_result(tcases, res);
+    int vec_len = xs->length();
+    size_t nbytes = fixnum_bytes * vec_len;
+    uint8_t *buf = new uint8_t[nbytes];
+
+    for (int i = 0; i < vec_len; ++i) {
+        const uint8_t *expected;
+        int n;
+        ys = xs->rotate(i);
+        fixnum_array::template map<add_cy>(res, cys, xs, ys);
+
+        expected = tcases.at(2*i).data();
+        res->retrieve_all(buf, nbytes, &n);
+        EXPECT_EQ(n, vec_len);
+        EXPECT_TRUE(arrays_are_equal(expected, nbytes, buf, nbytes));
+
+        expected = tcases.at(2*i + 1).data();
+        cys->retrieve_all(buf, nbytes, &n);
+        EXPECT_EQ(n, vec_len);
+        EXPECT_TRUE(arrays_are_equal(expected, nbytes, buf, nbytes));
+
+        delete ys;
+    }
     delete res;
+    delete cys;
     delete xs;
-    delete ys;
+    delete[] buf;
 }
 
 

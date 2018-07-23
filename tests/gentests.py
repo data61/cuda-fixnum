@@ -23,6 +23,7 @@ def write_tests(fname, arg):
     with open(fname, 'wb') as f:
         fixnum_bytes = bits >> 3
         vec_len = len(xs)
+        # FIXME: Need to get this from op somehow
         nvecs = 2 # number of output values
         write_int(f, 4, fixnum_bytes)
         write_int(f, 4, vec_len)
@@ -46,25 +47,24 @@ def sub_br(x, y, bits):
 def mul_wide(x, y, bits):
     return [(x * y) & ((1<<bits) - 1), (x * y) >> bits]
 
-def test_inputs_four_bytes():
-    nums = [1, 2, 3];
-    nums.extend([2**32 - n for n in nums])
-    nums.extend([0xFF << i for i in range(4)])
-    nums.extend([0, 0xFFFF, 0xFFFF0000, 0xFF00FF00, 0xFF00FF, 0xF0F0F0F0, 0x0F0F0F0F])
-    #nums.extend([1 << i for i in range(32)])
-    nums.append(0)
-    return nums
-
 def test_inputs(nbytes):
     assert nbytes >= 4 and (nbytes & (nbytes - 1)) == 0, "nbytes must be a binary power at least 4"
-    nums = test_inputs_four_bytes()
     q = nbytes // 4
-    res = []
-    for t in product(nums, repeat = q):
-        n = 0
-        for i, ti in enumerate(t):
-            n += ti << (i*32)
-        res.append(n)
+    res = [0]
+
+    nums = [1, 2, 3];
+    nums.extend([2**32 - n for n in nums])
+
+    for i in range(q):
+        res.extend(n << 32*i for n in nums)
+
+    lognbits = (32*q).bit_length()
+    for i in range(2, lognbits - 1):
+        # b = 0xF, 0xFF, 0xFFFF, 0xFFFFFFFF, ...
+        e = 1 << i
+        b = (1 << e) - 1
+        c = sum(b << 2*e*j for j in range(32*q // (2*e)))
+        res.extend([c, (1 << 32*q) - c - 1])
     return res
 
 def generate_everything(nbytes):
@@ -75,6 +75,8 @@ def generate_everything(nbytes):
     xs = test_inputs(nbytes)
     t = timer() - t
     print('done ({:.2f}s). Created {} arguments.'.format(t, len(xs)))
+    if nbytes == 4:
+        print('xs = {}'.format(xs))
 
     ops = {
         'add_cy': (add_cy, xs, bits),
@@ -85,4 +87,5 @@ def generate_everything(nbytes):
     return list(map(write_tests, fnames, ops.values()))
 
 if __name__ == '__main__':
-    generate_everything(8)
+    for i in range(2, 9):
+        generate_everything(1 << i)
