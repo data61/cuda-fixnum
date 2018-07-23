@@ -48,6 +48,9 @@ private:
     // TODO: Check whether we can get rid of this declaration
     static constexpr int WIDTH = fixnum_impl::SLOT_WIDTH;
 
+    // FIXME: Get rid of this hack
+    int is_valid;
+
     // Modulus for Monty arithmetic
     fixnum mod;
     // R_mod = 2^FIXNUM_BITS % mod
@@ -74,11 +77,14 @@ monty_mul<fixnum_impl>::monty_mul(fixnum modulus)
 {
     // mod must be odd > 1 in order to calculate R^-1 mod "mod".
     // FIXME: Handle these errors properly
-    assert(fixnum_impl::two_valuation(modulus) == 0);
-    assert(fixnum_impl::cmp(modulus, fixnum_impl::one()) != 0);
+    if (fixnum_impl::two_valuation(modulus) != 0 //fixnum_impl::get(modulus, 0) & 1 == 0
+            || fixnum_impl::cmp(modulus, fixnum_impl::one()) == 0) {
+        is_valid = 0;
+        return;
+    }
+    is_valid = 1;
 
     fixnum Rsqr_hi, Rsqr_lo;
-    int L = fixnum_impl::slot_layout::laneIdx();
 
     // R_mod = R % mod
     modrem(R_mod, fixnum_impl::one(), fixnum_impl::zero());
@@ -109,6 +115,8 @@ __device__ void
 monty_mul<fixnum_impl>::operator()(fixnum &z, fixnum x, fixnum y) const
 {
     typedef typename fixnum_impl::slot_layout slot_layout;
+    // FIXME: Fix this hack!
+    if (!is_valid) { z = 0; return; }
 
     int L = slot_layout::laneIdx();
     const word_tp tmp = x * fixnum_impl::get(y, 0) * inv_mod;
