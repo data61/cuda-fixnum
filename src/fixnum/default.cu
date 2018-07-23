@@ -373,6 +373,9 @@ public:
      *
      * TODO: Refactor common code between here, msb() and
      * most_sig_dig(). Perhaps write msb in terms of two_valuation?
+     *
+     * FIXME: Pretty sure this function is broken; e.g. if x is 0 but width <
+     * warpSize, the answer is wrong.
      */
     __device__ static int two_valuation(fixnum x) {
         // FIXME: Should be able to get this value from limits or numeric_limits
