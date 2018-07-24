@@ -8,7 +8,6 @@
 
 #include "util/cuda_wrap.h"
 #include "util/primitives.cu"
-#include "functions/set_const.cu"
 #include "fixnum_array.h"
 
 // TODO: The only device function in this file is the dispatch kernel
@@ -38,9 +37,16 @@ template< typename T >
 fixnum_array<fixnum_impl> *
 fixnum_array<fixnum_impl>::create(size_t nelts, T init) {
     fixnum_array *a = create(nelts);
-    auto fn = set_const<fixnum_impl>::create(init);
-    map(fn, a);
-    delete fn;
+    word_tp *p = a->ptr;
+    size_t nwords = nelts * FIXNUM_STORAGE_WORDS;
+
+    const uint8_t *in = reinterpret_cast<const uint8_t *>(&init);
+    word_tp elt[FIXNUM_STORAGE_WORDS];
+    memset(elt, 0, FIXNUM_STORAGE_WORDS*sizeof(word_tp));
+    std::copy(in, in + sizeof(T), reinterpret_cast<uint8_t *>(elt));
+
+    for (uint32_t i = 0; i < nelts; ++i, p += nwords)
+        std::copy(elt, elt + FIXNUM_STORAGE_WORDS, p);
     return a;
 }
 

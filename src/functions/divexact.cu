@@ -4,13 +4,6 @@
 
 template< typename fixnum_impl >
 class divexact {
-    // Divisor
-    fixnum b;
-    // 1/b (mod 2^(NBITS/2)) where NBITS := FIXNUM_BITS.  bi is
-    // nevertheless treated as an NBITS fixnum, so its hi half must be
-    // all zeros.
-    fixnum bi;
-
 public:
     typedef typename fixnum_impl::fixnum fixnum;
 
@@ -25,7 +18,7 @@ public:
         assert(b0 & 1);
 
         // Calculate b inverse
-        modinv minv;
+        modinv<fixnum_impl> minv;
         minv(bi, b, fixnum_impl::FIXNUM_BITS/2);
     }
 
@@ -46,7 +39,8 @@ public:
         //   with same slot_layout. Then use half_fixnum::mul_lo(w, a, bi)
         //
         fixnum_impl::mul_lo(w, a, bi);
-        w = (slot_layout::laneIdx() < slot_layout::WIDTH / 2) ? w : 0;
+        // FIXME: This doesn't work when SLOT_WIDTH = 0
+        //w = (fixnum_impl::slot_layout::laneIdx() < fixnum_impl::SLOT_WIDTH / 2) ? w : 0;
 
         // TODO: Can use the "middle product" to speed this up a
         // bit. See MCA Section 1.4.5.
@@ -61,4 +55,12 @@ public:
 
         q = w;
     }
+
+private:
+    // Divisor
+    fixnum b;
+    // 1/b (mod 2^(NBITS/2)) where NBITS := FIXNUM_BITS.  bi is
+    // nevertheless treated as an NBITS fixnum, so its hi half must be
+    // all zeros.
+    fixnum bi;
 };

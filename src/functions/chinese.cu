@@ -1,33 +1,40 @@
 #pragma once
 
 #include "functions/quorem_preinv.cu"
+#include "functions/multi_modexp.cu"
 
 template< typename fixnum_impl >
 class chinese {
 public:
     typedef typename fixnum_impl::fixnum fixnum;
 
-    __device__ chinese(fixnum p, fixnum q, fixnum p_inv_modq);
+    __device__ chinese(fixnum p, fixnum q);
 
     __device__ void operator()(fixnum &m, fixnum mp, fixnum mq) const;
 
 private:
-    // FIXME: These all have width = WIDTH/2, so this is a waste of
+    // TODO: These all have width = WIDTH/2, so this is a waste of
     // space, and (worse) the operations below waste cycles.
     fixnum p, q, c;  // c = p^-1 (mod q)
 
-    quorem_preinv mod_q;
+    quorem_preinv<fixnum_impl> mod_q;
 };
 
 template< typename fixnum_impl >
 __device__
-chinese<fixnum_impl>::chinese(
-    fixnum p, fixnum q, fixnum p_inv_modq)
-    : mod_q(q)
+chinese<fixnum_impl>::chinese(fixnum p_, fixnum q_)
+    : p(p_), q(q_), mod_q(q)
 {
     // TODO: q is now stored here and in mod_q; need to work out how
     // to share q between them.  Probably best just to provide quorem_preinv
     // with an accessor to the divisor.
+
+    // TODO: Make modinv use xgcd and use modinv instead.
+    // Use a^(q-2) = 1 (mod q)
+    fixnum qm2, two = (fixnum_impl::slot_layout::laneIdx() == 0) ? 2 : 0;
+    fixnum_impl::sub_br(qm2, q, two);
+    multi_modexp<fixnum_impl> minv(q);
+    minv(c, p, qm2);
 }
 
 

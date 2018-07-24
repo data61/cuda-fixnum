@@ -13,6 +13,8 @@
 #include "fixnum/default.cu"
 #include "functions/monty_mul.cu"
 #include "functions/modexp.cu"
+#include "functions/paillier_encrypt.cu"
+#include "functions/paillier_decrypt.cu"
 
 using namespace std;
 
@@ -364,6 +366,72 @@ TYPED_TEST(TypedPrimitives, modexp) {
     delete zs;
 }
 
+template< typename fixnum_impl >
+struct pencrypt {
+    typedef typename fixnum_impl::fixnum fixnum;
+
+    __device__ void operator()(fixnum &z, fixnum m, fixnum n, fixnum r) {
+        paillier_encrypt<fixnum_impl> enc(n);
+        enc(z, m, r);
+    };
+};
+
+template< typename fixnum_impl >
+struct pdecrypt {
+    typedef typename fixnum_impl::fixnum fixnum;
+
+    __device__ void operator()(fixnum &z, fixnum c_hi, fixnum c_lo, fixnum p, fixnum q) {
+        paillier_decrypt<fixnum_impl> dec(p, q);
+        dec(z, c_hi, c_lo);
+    };
+};
+
+TEST(Paillier, paillier) {
+    typedef default_fixnum_impl<8, uint32_t> ctxt;
+    typedef default_fixnum_impl<4, uint32_t> ptxt;
+
+    typedef fixnum_array<ctxt> ctxt_array;
+    typedef fixnum_array<ptxt> ptxt_array;
+
+    uint32_t pp = 7, qq = 13, nn = pp*qq, rr = 50, mm = 31;
+
+    ctxt_array *ct, *m, *n, *r;
+    ct = ctxt_array::create(1);
+    m = ctxt_array::create(1, mm);
+    n = ctxt_array::create(1, nn);
+    r = ctxt_array::create(1, rr);
+
+    ctxt_array::map<pencrypt>(ct, m, n, r);
+
+    uint64_t cc, cout = 3018;
+    ct->retrieve_into((uint8_t *)&cc, sizeof(uint64_t), 0);
+    EXPECT_EQ(cc, cout);
+
+    delete ct;
+    delete m;
+    delete n;
+    delete r;
+
+    ptxt_array *pt, *c_hi, *c_lo, *p, *q;
+    pt = ptxt_array::create(1);
+    c_hi = ptxt_array::create(1, cc >> 32);
+    c_lo = ptxt_array::create(1, cc & ((1UL << 32) - 1UL));
+    p = ptxt_array::create(1, pp);
+    q = ptxt_array::create(1, qq);
+
+    ptxt_array::map<pdecrypt>(pt, c_hi, c_lo, p, q);
+
+    uint32_t mout;
+    pt->retrieve_into((uint8_t *)&mout, sizeof(uint32_t), 0);
+
+    EXPECT_EQ(mm, mout);
+
+    delete pt;
+    delete c_hi;
+    delete c_lo;
+    delete p;
+    delete q;
+}
 
 int main(int argc, char *argv[])
 {
