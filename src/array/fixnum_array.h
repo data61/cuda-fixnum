@@ -15,6 +15,9 @@ public:
     static fixnum_array *create(const uint8_t *data, size_t total_bytes, size_t bytes_per_elt);
 
     fixnum_array *rotate(int i);
+    fixnum_array *rotations(int ntimes);
+    fixnum_array *repeat(int ntimes);
+    const uint8_t *get_ptr() const { return reinterpret_cast<const uint8_t *>(ptr); }
 
     ~fixnum_array();
 

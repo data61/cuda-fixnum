@@ -138,23 +138,25 @@ template< typename fixnum_impl, typename tcase_iter >
 void check_result(
     tcase_iter &tcase, uint32_t vec_len,
     initializer_list<const fixnum_array<fixnum_impl> *> args,
-    int skip = 1)
+    int skip = 1,
+    uint32_t nvecs = 1)
 {
     static constexpr int fixnum_bytes = fixnum_impl::FIXNUM_BYTES;
-    size_t nbytes = fixnum_bytes * vec_len;
+    size_t total_vec_len = vec_len * nvecs;
+    size_t nbytes = fixnum_bytes * total_vec_len;
     // TODO: The fixnum_arrays are in managed memory; there isn't really any
     // point to copying them into buf.
-    uint8_t *buf = new uint8_t[nbytes];
+    byte_array buf(nbytes);
 
     for (auto arg : args) {
-        int n;
-        const uint8_t *expected = tcase->data();
-        arg->retrieve_all(buf, nbytes, &n);
-        EXPECT_EQ(n, vec_len);
-        EXPECT_TRUE(arrays_are_equal(expected, nbytes, buf, nbytes));
-        tcase += skip;
+        auto buf_iter = buf.begin();
+        for (uint32_t i = 0; i < nvecs; ++i) {
+            std::copy(tcase->begin(), tcase->end(), buf_iter);
+            buf_iter += fixnum_bytes*vec_len;
+            tcase += skip;
+        }
+        EXPECT_TRUE(arrays_are_equal(buf.data(), nbytes, arg->get_ptr(), nbytes));
     }
-    delete[] buf;
 }
 
 template< typename fixnum_impl >
@@ -336,26 +338,30 @@ TYPED_TEST(TypedPrimitives, modexp) {
     typedef typename TestFixture::fixnum_impl fixnum_impl;
     typedef fixnum_array<fixnum_impl> fixnum_array;
 
-    fixnum_array *res, *xs;
+    fixnum_array *res, *input, *xs, *zs;
     vector<byte_array> tcases;
 
-    read_tcases(tcases, xs, "tests/modexp", 3);
-    int vec_len = xs->length();
-    res = fixnum_array::create(vec_len);
+    read_tcases(tcases, input, "tests/modexp", 3);
+    int vec_len = input->length();
+    int vec_len_sqr = vec_len * vec_len;
+
+    res = fixnum_array::create(vec_len_sqr);
+    xs = input->repeat(vec_len);
+    zs = input->rotations(vec_len);
 
     auto tcase = tcases.begin();
     for (int i = 0; i < vec_len; ++i) {
-        fixnum_array *ys = xs->rotate(i);
-        for (int j = 0; j < vec_len; ++j) {
-            fixnum_array *zs = xs->rotate(j);
-            fixnum_array::template map<my_modexp>(res, xs, ys, zs);
-            check_result(tcase, vec_len, {res});
-            delete zs;
-        }
+        fixnum_array *tmp = input->rotate(i);
+        fixnum_array *ys = tmp->repeat(vec_len);
+        fixnum_array::template map<my_modexp>(res, xs, ys, zs);
+        check_result(tcase, vec_len, {res}, 1, vec_len);
         delete ys;
+        delete tmp;
     }
     delete res;
+    delete input;
     delete xs;
+    delete zs;
 }
 
 
