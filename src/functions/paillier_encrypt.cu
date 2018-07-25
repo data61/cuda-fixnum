@@ -16,7 +16,8 @@ public:
      * stock-piled and piped into an encryption function.
      */
     __device__ void operator()(fixnum &ctxt, fixnum m, fixnum r) const {
-        assert(fixnum_impl::slot_layout::laneIdx() < fixnum_impl::SLOT_WIDTH/2 || m == 0);
+        // TODO: test this properly
+        //assert(fixnum_impl::slot_layout::laneIdx() < fixnum_impl::SLOT_WIDTH/2 || m == 0);
         fixnum_impl::mul_lo(m, m, n);
         fixnum_impl::incr_cy(m);
         pow(r, r);
@@ -34,7 +35,8 @@ private:
     // TODO: It is flipping stupid that this is necessary.
     __device__ fixnum square(fixnum n) {
         fixnum n2;
-        assert(fixnum_impl::slot_layout::laneIdx() < fixnum_impl::SLOT_WIDTH/2 || n == 0);
+        // TODO: test this properly
+        //assert(fixnum_impl::slot_layout::laneIdx() < fixnum_impl::SLOT_WIDTH/2 || n == 0);
         fixnum_impl::sqr_lo(n2, n);
         return n2;
     }

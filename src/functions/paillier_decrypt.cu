@@ -152,7 +152,7 @@ __device__ void
 paillier_decrypt_mod<fixnum_impl>::operator()(fixnum &mp, fixnum c_hi, fixnum c_lo) const
 {
     fixnum c, u, hi, lo;
-    // mp = c_hi * 2^n + c_lo (mod p^2)
+    // mp = c_hi * 2^n + c_lo (mod p^2)  which is nonzero because p != q
     mod_p2(c, c_hi, c_lo);
 
     pow(u, c);
