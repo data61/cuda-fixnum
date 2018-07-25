@@ -1,6 +1,7 @@
 from itertools import chain, product
 from collections import deque
 from timeit import default_timer as timer
+from gmpy2 import is_prime
 
 def write_int(dest, sz, n):
     dest.write(n.to_bytes(sz, byteorder = 'little'))
@@ -22,6 +23,17 @@ def mktests(op, xs, nargs, bits):
         for _ in range(len(xs)):
             for _ in range(len(xs)):
                 yield list(zip(*[op(x, y, z, bits) for x, y, z in zip(xs, ys, zs)]))
+                zs.rotate(1)
+            ys.rotate(1)
+    elif nargs == 4:
+        ys = deque(xs)
+        zs = deque(xs)
+        ws = deque(xs)
+        for _ in range(len(xs)):
+            for _ in range(len(xs)):
+                for _ in range(len(xs)):
+                    yield list(zip(*[op(x, y, z, w, bits) for x, y, z, w in zip(xs, ys, zs, ws)]))
+                    ws.rotate(1)
                 zs.rotate(1)
             ys.rotate(1)
     else:
@@ -63,8 +75,12 @@ def modexp(x, y, z, bits):
         return [0]
     return [pow(x, y, z)]
 
+def paillier_encrypt(p, q, r, m, bits):
+    n = p * q
+    n2 = n * n
+    return [((1 + m * n) * pow(r, n, n2)) % n2]
+
 def test_inputs(nbytes):
-    assert nbytes >= 4 and (nbytes & (nbytes - 1)) == 0, "nbytes must be a binary power at least 4"
     q = nbytes // 4
     res = [0]
 
@@ -83,7 +99,27 @@ def test_inputs(nbytes):
         res.extend([c, (1 << 32*q) - c - 1])
     return res
 
-def generate_everything(nbytes):
+def prev_prime(n):
+    # subtract 1 or 2 from n, depending on whether n is even or odd.
+    n -= 1 + n%2
+    while not (is_prime(n) or n < 3):
+        n -= 2
+    assert n >= 3, 'Failed to find a prime'
+    return n
+
+def test_primes(nbytes):
+    ps = [3, 5, 7]
+    for i in range(nbytes, nbytes + 1): # i in range(1, ...):
+        p = prev_prime(1 << (8*i))
+        ps.append(p)
+        p = prev_prime(p)
+        ps.append(p)
+        p = prev_prime(p)
+        ps.append(p)
+    return ps
+
+def generate_tests(nbytes, tests):
+    assert nbytes >= 4 and (nbytes & (nbytes - 1)) == 0, "nbytes must be a binary power at least 4"
     print('Generating input arguments... ', end='', flush=True)
     bits = nbytes * 8
 
@@ -91,18 +127,24 @@ def generate_everything(nbytes):
     xs = test_inputs(nbytes)
     t = timer() - t
     print('done ({:.2f}s). Created {} arguments.'.format(t, len(xs)))
-    if nbytes == 4:
-        print('xs = {}'.format(xs))
+
+    # ps is only used by paillier_encrypt, which needs primes 1/4 the size of
+    # the ciphertext.
+    ps = test_primes(nbytes // 4)
+    print('primes = ', ps)
 
     ops = {
         'add_cy': (add_cy, xs, 2, 2, bits),
         'sub_br': (sub_br, xs, 2, 2, bits),
         'mul_wide': (mul_wide, xs, 2, 2, bits),
-        'modexp': (modexp, xs, 3, 1, bits)
+        'modexp': (modexp, xs, 3, 1, bits),
+        'paillier_encrypt' : (paillier_encrypt, ps, 4, 1, bits)
     }
-    fnames = map(lambda fn: fn + '_' + str(nbytes), ops.keys())
-    return list(map(write_tests, fnames, ops.values()))
+    test_fns = { fn: ops[fn] for fn in ops.keys() & tests }
+    fnames = map(lambda fn: fn + '_' + str(nbytes), test_fns.keys())
+    return list(map(write_tests, fnames, test_fns.values()))
 
 if __name__ == '__main__':
+    import sys
     for i in range(2, 9):
-        generate_everything(1 << i)
+        generate_tests(1 << i, sys.argv[1:])
