@@ -72,8 +72,13 @@ chinese<fixnum_impl>::operator()(fixnum &m, fixnum mp, fixnum mq) const
         //quorem_rem(mod_q, t, hi, lo, width/2);
         mod_q(t, hi, lo);
 
-        br = fixnum_impl::sub_br(u, q, t);
-        assert(br == 0);
+        // TODO: This is a mess.
+        if (t != 0) {
+            br = fixnum_impl::sub_br(u, q, t);
+            assert(br == 0);
+        } else {
+            u = t;
+        }
     } else {
         // Mp < Mq
         // TODO: Replace mul_wide with the equivalent mul_lo
