@@ -370,7 +370,9 @@ template< typename fixnum_impl >
 struct pencrypt {
     typedef typename fixnum_impl::fixnum fixnum;
 
-    __device__ void operator()(fixnum &z, fixnum m, fixnum n, fixnum r) {
+    __device__ void operator()(fixnum &z, fixnum p, fixnum q, fixnum r, fixnum m) {
+        fixnum n;
+        fixnum_impl::mul_lo(n, p, q);
         paillier_encrypt<fixnum_impl> enc(n);
         enc(z, m, r);
     };
@@ -380,57 +382,73 @@ template< typename fixnum_impl >
 struct pdecrypt {
     typedef typename fixnum_impl::fixnum fixnum;
 
-    __device__ void operator()(fixnum &z, fixnum c_hi, fixnum c_lo, fixnum p, fixnum q) {
+    __device__ void operator()(fixnum &z, fixnum ct, fixnum p, fixnum q, fixnum r, fixnum m) {
+        if (fixnum_impl::cmp(p, q) == 0
+              || fixnum_impl::cmp(r, p) == 0
+              || fixnum_impl::cmp(r, q) == 0) {
+            z = 0;
+            return;
+        }
         paillier_decrypt<fixnum_impl> dec(p, q);
-        dec(z, c_hi, c_lo);
+        dec(z, 0, ct);
+        fixnum n;
+        fixnum_impl::mul_lo(n, p, q);
+        quorem_preinv<fixnum_impl> qr(n);
+        qr(m, 0, m);
+
+        z = (z != m);
     };
 };
 
-TEST(Paillier, paillier) {
-    typedef default_fixnum_impl<8, uint32_t> ctxt;
-    typedef default_fixnum_impl<4, uint32_t> ptxt;
+TYPED_TEST(TypedPrimitives, paillier) {
+    typedef typename TestFixture::fixnum_impl fixnum_impl;
+
+    typedef fixnum_impl ctxt;
+    // TODO: FIXNUM_BYTES/2 only works when FIXNUM_BYTES > 4
+    //typedef default_fixnum_impl<ctxt::FIXNUM_BYTES/2, typename ctxt::word_tp> ptxt;
+    typedef fixnum_impl ptxt;
 
     typedef fixnum_array<ctxt> ctxt_array;
     typedef fixnum_array<ptxt> ptxt_array;
 
-    uint32_t pp = 7, qq = 13, nn = pp*qq, rr = 50, mm = 31;
+    ctxt_array *ct, *pt, *p;
+    vector<byte_array> tcases;
+    read_tcases(tcases, p, "tests/paillier_encrypt", 4);
 
-    ctxt_array *ct, *m, *n, *r;
-    ct = ctxt_array::create(1);
-    m = ctxt_array::create(1, mm);
-    n = ctxt_array::create(1, nn);
-    r = ctxt_array::create(1, rr);
+    int vec_len = p->length();
+    ct = ctxt_array::create(vec_len);
+    pt = ctxt_array::create(vec_len);
 
-    ctxt_array::map<pencrypt>(ct, m, n, r);
+    // TODO: Parallelise these tests similar to modexp above.
+    ctxt_array *zeros = ctxt_array::create(vec_len, 0);
+    auto tcase = tcases.begin();
+    for (int i = 0; i < vec_len; ++i) {
+        ctxt_array *q = p->rotate(i);
+        for (int j = 0; j < vec_len; ++j) {
+            ctxt_array *r = p->rotate(j);
+            for (int k = 0; k < vec_len; ++k) {
+                ctxt_array *m = p->rotate(k);
 
-    uint64_t cc, cout = 3018;
-    ct->retrieve_into((uint8_t *)&cc, sizeof(uint64_t), 0);
-    EXPECT_EQ(cc, cout);
+                ctxt_array::template map<pencrypt>(ct, p, q, r, m);
+                check_result(tcase, vec_len, {ct});
 
-    delete ct;
-    delete m;
-    delete n;
-    delete r;
+                ptxt_array::template map<pdecrypt>(pt, ct, p, q, r, m);
 
-    ptxt_array *pt, *c_hi, *c_lo, *p, *q;
-    pt = ptxt_array::create(1);
-    c_hi = ptxt_array::create(1, cc >> 32);
-    c_lo = ptxt_array::create(1, cc & ((1UL << 32) - 1UL));
-    p = ptxt_array::create(1, pp);
-    q = ptxt_array::create(1, qq);
+                size_t nbytes = vec_len * ctxt::FIXNUM_BYTES;
+                const uint8_t *zptr = reinterpret_cast<const uint8_t *>(zeros->get_ptr());
+                const uint8_t *ptptr = reinterpret_cast<const uint8_t *>(pt->get_ptr());
+                EXPECT_TRUE(arrays_are_equal(zptr, nbytes, ptptr, nbytes));
 
-    ptxt_array::map<pdecrypt>(pt, c_hi, c_lo, p, q);
+                delete m;
+            }
+            delete r;
+        }
+        delete q;
+    }
 
-    uint32_t mout;
-    pt->retrieve_into((uint8_t *)&mout, sizeof(uint32_t), 0);
-
-    EXPECT_EQ(mm, mout);
-
-    delete pt;
-    delete c_hi;
-    delete c_lo;
     delete p;
-    delete q;
+    delete ct;
+    delete zeros;
 }
 
 int main(int argc, char *argv[])
