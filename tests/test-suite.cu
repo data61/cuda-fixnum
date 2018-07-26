@@ -10,7 +10,7 @@
 #include <sstream>
 
 #include "array/fixnum_array.h"
-#include "fixnum/default.cu"
+#include "fixnum/fixnum.cu"
 #include "functions/monty_mul.cu"
 #include "functions/modexp.cu"
 #include "functions/paillier_encrypt.cu"
