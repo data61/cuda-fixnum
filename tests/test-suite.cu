@@ -10,7 +10,7 @@
 
 #include "array/fixnum_array.h"
 #include "fixnum/word_fixnum.cu"
-#include "fixnum/fixnum.cu"
+#include "fixnum/warp_fixnum.cu"
 #include "functions/monty_mul.cu"
 #include "functions/modexp.cu"
 #include "functions/paillier_encrypt.cu"
