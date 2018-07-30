@@ -29,22 +29,6 @@ public:
     __device__ __forceinline__
     word_fixnum(digit z) : x(z) { }
 
-#if 0
-    /*
-     * load/set the value from ptr corresponding to this thread (lane) in
-     * slot number idx.
-     *
-     * TODO: These are fugly.
-     */
-    __device__ static fixnum load(const uint8_t *ptr, int idx) {
-        return *(reinterpret_cast<const digit *>(ptr) + idx);
-    }
-
-    __device__ static fixnum &load(uint8_t *ptr, int idx) {
-        return *(reinterpret_cast<fixnum *>(ptr) + idx);
-    }
-#endif
-
     __device__ __forceinline__
     static void
     set_if(fixnum &s, fixnum a, int cond) {

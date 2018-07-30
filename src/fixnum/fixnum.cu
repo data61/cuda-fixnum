@@ -88,46 +88,6 @@ public:
     }
 
     /*
-     * load/set the value from ptr corresponding to this thread (lane) in
-     * slot number idx.
-     *
-     * FIXME: idx shouldn't be in the interface to load(), it should be used to
-     * modify ptr before it is passed to load().
-     */
-#if 0
-    __device__ static fixnum load(const fixnum *ptr) {
-        return digit::load(ptr + layout::laneIdx());
-    }
-
-    /// fixnum::load(ptr[off]) -->
-    // Have to do all indexing at call site? :(
-    __device__ static fixnum load(const fixnum &ptr) {
-        return digit::load(ptr + layout::laneIdx());
-        //return digit::load(ptr);
-    }
-
-    __device__ static fixnum load(const fixnum *ptr, int idx = 0) {
-        int off = idx * layout::WIDTH;
-        return digit::load(ptr + off, layout::laneIdx());
-    }
-
-    __device__ static fixnum &load(fixnum *ptr, int idx = 0) {
-        int off = idx * layout::WIDTH + layout::laneIdx();
-        return digit::load(ptr, off);
-    }
-
-    __device__ static fixnum load(const uint8_t *ptr, int idx) {
-        int off = idx * BYTES * layout::WIDTH;
-        return digit::load(ptr + off, layout::laneIdx());
-    }
-
-    __device__ static fixnum &load(uint8_t *ptr, int idx) {
-        int off = idx * BYTES * layout::WIDTH;
-        return digit::load(ptr + off, layout::laneIdx());
-    }
-#endif
-
-    /*
      * Return digit at index idx.
      */
     __device__ static fixnum get(fixnum var, int idx) {
