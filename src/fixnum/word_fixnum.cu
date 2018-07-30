@@ -146,7 +146,7 @@ public:
         internal::mad_lo(lo, a, b, c);
     }
 
-    // as above but with carry in cy
+    // as above but increment cy by the mad carry
     __device__ __forceinline__
     static void
     mad_lo_cc(fixnum &lo, fixnum &cy, fixnum a, fixnum b, fixnum c) {
@@ -159,6 +159,7 @@ public:
         internal::mad_hi(hi, a, b, c);
     }
 
+    // as above but increment cy by the mad carry
     __device__ __forceinline__
     static void
     mad_hi_cc(fixnum &hi, fixnum &cy, fixnum a, fixnum b, fixnum c) {
