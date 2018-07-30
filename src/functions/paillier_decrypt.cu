@@ -6,14 +6,12 @@
 #include "functions/multi_modexp.cu"
 
 
-template< typename fixnum_impl >
+template< typename fixnum >
 class paillier_decrypt_mod;
 
-template< typename fixnum_impl >
+template< typename fixnum >
 class paillier_decrypt {
 public:
-    typedef typename fixnum_impl::fixnum fixnum;
-
     __device__ paillier_decrypt(fixnum p, fixnum q)
         : n(prod(p, q))
         , crt(p, q)
@@ -29,20 +27,19 @@ private:
     fixnum n;
 
     // Secret key is (p, q).
-    paillier_decrypt_mod<fixnum_impl> decrypt_modp, decrypt_modq;
+    paillier_decrypt_mod<fixnum> decrypt_modp, decrypt_modq;
 
     // TODO: crt and decrypt_modq both compute and hold quorem_preinv(q); find a
     // way to share them.
-    chinese<fixnum_impl> crt;
+    chinese<fixnum> crt;
 
-    // TODO: It is flipping stupid that this is necessary. Also, it has to be
-    // called twice.
+    // TODO: It is flipping stupid that this is necessary.
     __device__ fixnum prod(fixnum p, fixnum q) {
         fixnum n;
         // TODO: These don't work when SLOT_WIDTH = 0
-        //assert(fixnum_impl::slot_layout::laneIdx() < fixnum_impl::SLOT_WIDTH/2 || p == 0);
-        //assert(fixnum_impl::slot_layout::laneIdx() < fixnum_impl::SLOT_WIDTH/2 || q == 0);
-        fixnum_impl::mul_lo(n, p, q);
+        //assert(fixnum::slot_layout::laneIdx() < fixnum::SLOT_WIDTH/2 || p == 0);
+        //assert(fixnum::slot_layout::laneIdx() < fixnum::SLOT_WIDTH/2 || q == 0);
+        fixnum::mul_lo(n, p, q);
         return n;
     }
 };
@@ -52,9 +49,9 @@ private:
  *
  * m, c_hi and c_lo must be PLAINTEXT_DIGITS long.
  */
-template< typename fixnum_impl >
+template< typename fixnum >
 __device__ void
-paillier_decrypt<fixnum_impl>::operator()(fixnum &ptxt, fixnum ctxt_hi, fixnum ctxt_lo) const
+paillier_decrypt<fixnum>::operator()(fixnum &ptxt, fixnum ctxt_hi, fixnum ctxt_lo) const
 {
     fixnum mp, mq;
     decrypt_modp(mp, ctxt_hi, ctxt_lo);
@@ -63,11 +60,9 @@ paillier_decrypt<fixnum_impl>::operator()(fixnum &ptxt, fixnum ctxt_hi, fixnum c
 }
 
 
-template< typename fixnum_impl >
+template< typename fixnum >
 class paillier_decrypt_mod {
 public:
-    typedef typename fixnum_impl::fixnum fixnum;
-
     __device__ paillier_decrypt_mod(fixnum p, fixnum n);
 
     __device__ void operator()(fixnum &mp, fixnum c_hi, fixnum c_lo) const;
@@ -87,58 +82,59 @@ private:
     fixnum p_sqr;
 
     // Exact division by p
-    divexact<fixnum_impl> div_p;
+    divexact<fixnum> div_p;
     // Remainder after division by p.
-    quorem_preinv<fixnum_impl> mod_p;
+    quorem_preinv<fixnum> mod_p;
     // Remainder after division by p^2.
-    quorem_preinv<fixnum_impl> mod_p2;
+    quorem_preinv<fixnum> mod_p2;
 
     // Modexp for x |--> x^(p - 1) (mod p^2)
-    modexp<fixnum_impl> pow;
+    modexp<fixnum> pow;
 
-    // TODO: It is flipping stupid that this is necessary.
+    // TODO: It is flipping stupid that these are necessary.
     __device__ fixnum square(fixnum p) {
         fixnum p2;
         // TODO: This doesn't work when SLOT_WIDTH = 0
-        //assert(fixnum_impl::slot_layout::laneIdx() < fixnum_impl::SLOT_WIDTH/2 || p == 0);
-        fixnum_impl::sqr_lo(p2, p);
+        //assert(fixnum::slot_layout::laneIdx() < fixnum::SLOT_WIDTH/2 || p == 0);
+        fixnum::sqr_lo(p2, p);
         return p2;
     }
     __device__ fixnum sub1(fixnum p) {
         fixnum pm1;
-        fixnum_impl::sub_br(pm1, p, fixnum_impl::one());
+        fixnum::sub(pm1, p, fixnum::one());
         return pm1;
     }
 };
 
 
-template< typename fixnum_impl >
+template< typename fixnum >
 __device__
-paillier_decrypt_mod<fixnum_impl>::paillier_decrypt_mod(fixnum p, fixnum n)
+paillier_decrypt_mod<fixnum>::paillier_decrypt_mod(fixnum p, fixnum n)
     : p_sqr(square(p))
     , div_p(p)
     , mod_p(p)
     , mod_p2(p_sqr)
     , pow(p_sqr, sub1(p))
 {
-    int cy;
+    typedef typename fixnum::digit digit;
+    digit cy;
     fixnum t = n;
-    cy = fixnum_impl::incr_cy(t);
+    cy = fixnum::incr_cy(t);
     // n is the product of primes, and 2^(2^k) - 1 has (at least) k factors,
     // hence n is less than 2^FIXNUM_BITS - 1, hence incrementing n shouldn't
     // overflow.
-    assert(cy == 0);
+    assert(digit::is_zero(cy));
     // TODO: Check whether reducing t is necessary.
-    mod_p2(t, 0, t);
+    mod_p2(t, fixnum::zero(), t);
     pow(t, t);
-    fixnum_impl::decr_br(t);
+    fixnum::decr_br(t);
     div_p(t, t);
 
     // TODO: Make modinv use xgcd and use modinv instead.
     // Use a^(p-2) = 1 (mod p)
-    fixnum pm2, two = (fixnum_impl::slot_layout::laneIdx() == 0) ? 2 : 0;
-    fixnum_impl::sub_br(pm2, p, two);
-    multi_modexp<fixnum_impl> minv(p);
+    fixnum pm2;
+    fixnum::sub(pm2, p, fixnum::two());
+    multi_modexp<fixnum> minv(p);
     minv(h, t, pm2);
 }
 
@@ -147,23 +143,23 @@ paillier_decrypt_mod<fixnum_impl>::paillier_decrypt_mod(fixnum p, fixnum n)
  *
  * Decryption mod p of c is put in the (bottom half of) mp.
  */
-template< typename fixnum_impl >
+template< typename fixnum >
 __device__ void
-paillier_decrypt_mod<fixnum_impl>::operator()(fixnum &mp, fixnum c_hi, fixnum c_lo) const
+paillier_decrypt_mod<fixnum>::operator()(fixnum &mp, fixnum c_hi, fixnum c_lo) const
 {
     fixnum c, u, hi, lo;
     // mp = c_hi * 2^n + c_lo (mod p^2)  which is nonzero because p != q
     mod_p2(c, c_hi, c_lo);
 
     pow(u, c);
-    fixnum_impl::decr_br(u);
+    fixnum::decr_br(u);
     div_p(u, u);
     // Check that the high half of u is now zero.
     // TODO: This doesn't work when SLOT_WIDTH = 0
-    //assert(fixnum_impl::slot_layout::laneIdx() < fixnum_impl::SLOT_WIDTH/2 || u == 0);
+    //assert(fixnum::slot_layout::laneIdx() < fixnum::SLOT_WIDTH/2 || u == 0);
 
     // TODO: make use of the fact that u and h are half-width.
-    fixnum_impl::mul_wide(hi, lo, u, h);
-    assert(hi == 0);
+    fixnum::mul_wide(hi, lo, u, h);
+    assert(fixnum::is_zero(hi));
     mod_p(mp, hi, lo);
 }
