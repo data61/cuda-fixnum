@@ -1,40 +1,39 @@
 #pragma once
 
 #include <iostream>
-#include <stdint.h>
+#include <cstdint>
 
 // TODO: Copy over functionality and documentation from IntmodVector.
-template< typename fixnum_impl >
+template< typename fixnum >
 class fixnum_array {
 public:
+    typedef std::uint8_t byte;
+
     static fixnum_array *create(size_t nelts);
     template< typename T >
     static fixnum_array *create(size_t nelts, T init);
     // NB: If bytes_per_elt doesn't divide len, the last len % bytes_per_elt
     // bytes are *dropped*.
-    static fixnum_array *create(const uint8_t *data, size_t total_bytes, size_t bytes_per_elt);
+    static fixnum_array *create(const byte *data, size_t total_bytes, size_t bytes_per_elt);
 
     fixnum_array *rotate(int i);
     fixnum_array *rotations(int ntimes);
     fixnum_array *repeat(int ntimes);
-    const uint8_t *get_ptr() const { return reinterpret_cast<const uint8_t *>(ptr); }
+    const byte *get_ptr() const { return reinterpret_cast<const byte *>(ptr); }
 
     ~fixnum_array();
 
     int length() const;
 
-    int set(int idx, const uint8_t *data, size_t len);
-    size_t retrieve_into(uint8_t *dest, size_t dest_space, int idx) const;
-    void retrieve_all(uint8_t *dest, size_t dest_space, int *nelts) const;
+    int set(int idx, const byte *data, size_t len);
+    size_t retrieve_into(byte *dest, size_t dest_space, int idx) const;
+    void retrieve_all(byte *dest, size_t dest_space, int *nelts) const;
 
     template< template <typename> class Func, typename... Args >
     static void map(Args... args);
 
 private:
-    static constexpr int FIXNUM_STORAGE_WORDS = fixnum_impl::SLOT_WIDTH;
-
-    typedef typename fixnum_impl::word_tp word_tp;
-    word_tp *ptr;
+    fixnum *ptr;
     int nelts;
 
     fixnum_array() {  }
@@ -43,8 +42,8 @@ private:
     fixnum_array &operator=(const fixnum_array &);
 };
 
-template< typename fixnum_impl >
+template< typename fixnum >
 std::ostream &
-operator<<(std::ostream &os, const fixnum_array<fixnum_impl> *fn_arr);
+operator<<(std::ostream &os, const fixnum_array<fixnum> *fn_arr);
 
 #include "fixnum_array.cu"

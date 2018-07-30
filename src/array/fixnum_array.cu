@@ -7,7 +7,6 @@
 #include <algorithm>
 
 #include "util/cuda_wrap.h"
-#include "util/primitives.cu"
 #include "fixnum_array.h"
 
 // TODO: The only device function in this file is the dispatch kernel
@@ -20,61 +19,83 @@
 
 // TODO: Can I use smart pointers? unique_ptr?
 
-template< typename fixnum_impl >
-fixnum_array<fixnum_impl> *
-fixnum_array<fixnum_impl>::create(size_t nelts) {
+// TODO: Clean this up
+namespace {
+    typedef std::uint8_t byte;
+
+    template< typename T >
+    static byte *as_byte_ptr(T *ptr) {
+        return reinterpret_cast<byte *>(ptr);
+    }
+
+    template< typename T >
+    static const byte *as_byte_ptr(const T *ptr) {
+        return reinterpret_cast<const byte *>(ptr);
+    }
+
+    // TODO: refactor from word_fixnum.
+    template< typename T >
+    T ceilquo(T n, T d) {
+        return (n + d - 1) / d;
+    }
+}
+
+template< typename fixnum >
+fixnum_array<fixnum> *
+fixnum_array<fixnum>::create(size_t nelts) {
     fixnum_array *a = new fixnum_array;
     a->nelts = nelts;
     if (nelts > 0) {
-        size_t nwords = nelts * FIXNUM_STORAGE_WORDS;
-        cuda_malloc_managed(&a->ptr, nwords * sizeof(word_tp));
+        size_t nbytes = nelts * fixnum::BYTES;
+        cuda_malloc_managed(&a->ptr, nbytes);
     }
     return a;
 }
 
-template< typename fixnum_impl >
+template< typename fixnum >
 template< typename T >
-fixnum_array<fixnum_impl> *
-fixnum_array<fixnum_impl>::create(size_t nelts, T init) {
+fixnum_array<fixnum> *
+fixnum_array<fixnum>::create(size_t nelts, T init) {
     fixnum_array *a = create(nelts);
-    word_tp *p = a->ptr;
+    byte *p = as_byte_ptr(a->ptr);
 
-    const uint8_t *in = reinterpret_cast<const uint8_t *>(&init);
-    word_tp elt[FIXNUM_STORAGE_WORDS];
-    memset(elt, 0, FIXNUM_STORAGE_WORDS*sizeof(word_tp));
-    std::copy(in, in + sizeof(T), reinterpret_cast<uint8_t *>(elt));
+    const byte *in = as_byte_ptr(&init);
+    byte elt[fixnum::BYTES];
+    memset(elt, 0, fixnum::BYTES);
+    std::copy(in, in + sizeof(T), elt);
 
-    for (uint32_t i = 0; i < nelts; ++i, p += FIXNUM_STORAGE_WORDS)
-        std::copy(elt, elt + FIXNUM_STORAGE_WORDS, p);
+    for (uint32_t i = 0; i < nelts; ++i, p += fixnum::BYTES)
+        std::copy(elt, elt + fixnum::BYTES, p);
     return a;
 }
 
-template< typename fixnum_impl >
-fixnum_array<fixnum_impl> *
-fixnum_array<fixnum_impl>::create(const uint8_t *data, size_t total_bytes, size_t bytes_per_elt) {
+template< typename fixnum >
+fixnum_array<fixnum> *
+fixnum_array<fixnum>::create(const byte *data, size_t total_bytes, size_t bytes_per_elt) {
     // FIXME: Should handle this error more appropriately
     if (total_bytes == 0 || bytes_per_elt == 0)
         return nullptr;
 
-    size_t nelts = iceil(total_bytes, bytes_per_elt);
+    size_t nelts = ceilquo(total_bytes, bytes_per_elt);
     fixnum_array *a = create(nelts);
 
-    word_tp *p = a->ptr;
-    const uint8_t *d = data;
+    byte *p = as_byte_ptr(a->ptr);
+    const byte *d = data;
     for (size_t i = 0; i < nelts; ++i) {
-        fixnum_impl::from_bytes(p, d, bytes_per_elt);
-        p += FIXNUM_STORAGE_WORDS;
+        fixnum::from_bytes(p, d, bytes_per_elt);
+        p += fixnum::BYTES;
         d += bytes_per_elt;
     }
     return a;
 }
 
-template< typename word_tp >
+// TODO: This doesn't belong here.
+template< typename digit >
 void
-rotate_array(word_tp *out, const word_tp *in, int nelts, int words_per_elt, int i) {
+rotate_array(digit *out, const digit *in, int nelts, int words_per_elt, int i) {
     if (i < 0) {
         int j = -i;
-        i += nelts * iceil(j, nelts);
+        i += nelts * ceilquo(j, nelts);
         assert(i >= 0 && i < nelts);
         i = nelts - i;
     } else if (i >= nelts)
@@ -89,83 +110,89 @@ rotate_array(word_tp *out, const word_tp *in, int nelts, int words_per_elt, int 
 // TODO: Find a way to return a wrapper that just modifies the requested indices
 // on the fly, rather than copying the whole array. Hard part will be making it
 // work with map/dispatch.
-template< typename fixnum_impl >
-fixnum_array<fixnum_impl> *
-fixnum_array<fixnum_impl>::rotate(int i) {
+template< typename fixnum >
+fixnum_array<fixnum> *
+fixnum_array<fixnum>::rotate(int i) {
     fixnum_array *a = create(length());
-    rotate_array(a->ptr, ptr, nelts, FIXNUM_STORAGE_WORDS, i);
+    byte *p = as_byte_ptr(a->ptr);
+    const byte *q = as_byte_ptr(ptr);
+    rotate_array(p, q, nelts, fixnum::BYTES, i);
     return a;
 }
 
-template< typename fixnum_impl >
-fixnum_array<fixnum_impl> *
-fixnum_array<fixnum_impl>::repeat(int ntimes) {
+template< typename fixnum >
+fixnum_array<fixnum> *
+fixnum_array<fixnum>::repeat(int ntimes) {
     fixnum_array *a = create(length() * ntimes);
-    word_tp *p = a->ptr;
-    int nwords = nelts * FIXNUM_STORAGE_WORDS;
-    for (int i = 0; i < ntimes; ++i, p += nwords)
-        std::copy(ptr, ptr + nwords, p);
+    byte *p = as_byte_ptr(a->ptr);
+    const byte *q = as_byte_ptr(ptr);
+    int nbytes = nelts * fixnum::BYTES;
+    for (int i = 0; i < ntimes; ++i, p += nbytes)
+        std::copy(q, q + nbytes, p);
     return a;
 }
 
-template< typename fixnum_impl >
-fixnum_array<fixnum_impl> *
-fixnum_array<fixnum_impl>::rotations(int ntimes) {
+template< typename fixnum >
+fixnum_array<fixnum> *
+fixnum_array<fixnum>::rotations(int ntimes) {
     fixnum_array *a = create(nelts * ntimes);
-    word_tp *p = a->ptr;
-    int nwords = nelts * FIXNUM_STORAGE_WORDS;
-    for (int i = 0; i < ntimes; ++i, p += nwords)
-        rotate_array(p, ptr, nelts, FIXNUM_STORAGE_WORDS, i);
+    byte *p = as_byte_ptr(a->ptr);
+    const byte *q = as_byte_ptr(ptr);
+    int nbytes = nelts * fixnum::BYTES;
+    for (int i = 0; i < ntimes; ++i, p += nbytes)
+        rotate_array(p, q, nelts, fixnum::BYTES, i);
     return a;
 }
 
 
-template< typename fixnum_impl >
+template< typename fixnum >
 int
-fixnum_array<fixnum_impl>::set(int idx, const uint8_t *data, size_t nbytes) {
+fixnum_array<fixnum>::set(int idx, const byte *data, size_t nbytes) {
     // FIXME: Better error handling
-    if (idx < 0 || idx >= this->nelts)
+    if (idx < 0 || idx >= nelts)
         return -1;
 
-    int off = idx * FIXNUM_STORAGE_WORDS;
-    return fixnum_impl::from_bytes(this->ptr + off, data, nbytes);
+    int off = idx * fixnum::BYTES;
+    const byte *q = as_byte_ptr(ptr);
+    return fixnum::from_bytes(q + off, data, nbytes);
 }
 
-template< typename fixnum_impl >
-fixnum_array<fixnum_impl>::~fixnum_array() {
+template< typename fixnum >
+fixnum_array<fixnum>::~fixnum_array() {
     if (nelts > 0)
         cuda_free(ptr);
 }
 
-template< typename fixnum_impl >
+template< typename fixnum >
 int
-fixnum_array<fixnum_impl>::length() const {
+fixnum_array<fixnum>::length() const {
     return nelts;
 }
 
-template< typename fixnum_impl >
+template< typename fixnum >
 size_t
-fixnum_array<fixnum_impl>::retrieve_into(uint8_t *dest, size_t dest_space, int idx) const {
+fixnum_array<fixnum>::retrieve_into(byte *dest, size_t dest_space, int idx) const {
     if (idx < 0 || idx > nelts) {
         // FIXME: This is not the right way to handle an "index out of
         // bounds" error.
         return 0;
     }
-    return fixnum_impl::to_bytes(dest, dest_space, ptr + idx * FIXNUM_STORAGE_WORDS);
+    const byte *q = as_byte_ptr(ptr);
+    return fixnum::to_bytes(dest, dest_space, q + idx * fixnum::BYTES);
 }
 
 // FIXME: Can return fewer than nelts elements.
-template< typename fixnum_impl >
+template< typename fixnum >
 void
-fixnum_array<fixnum_impl>::retrieve_all(uint8_t *dest, size_t dest_space, int *dest_nelts) const {
-    const word_tp *p = ptr;
-    uint8_t *d = dest;
-    int max_dest_nelts = dest_space / fixnum_impl::FIXNUM_BYTES;
+fixnum_array<fixnum>::retrieve_all(byte *dest, size_t dest_space, int *dest_nelts) const {
+    const byte *p = as_byte_ptr(ptr);
+    byte *d = dest;
+    int max_dest_nelts = dest_space / fixnum::BYTES;
     *dest_nelts = std::min(nelts, max_dest_nelts);
     for (int i = 0; i < *dest_nelts; ++i) {
-        fixnum_impl::to_bytes(d, fixnum_impl::FIXNUM_BYTES, p);
-        p += FIXNUM_STORAGE_WORDS;
-        d += fixnum_impl::FIXNUM_BYTES;
+        fixnum::to_bytes(d, fixnum::BYTES, p);
+        p += fixnum::BYTES;
+        d += fixnum::BYTES;
     }
 }
 
@@ -188,10 +215,10 @@ namespace {
     }
 }
 
-template< typename fixnum_impl >
+template< typename fixnum >
 std::ostream &
-operator<<(std::ostream &os, const fixnum_array<fixnum_impl> *fn_arr) {
-    constexpr int fn_bytes = fixnum_impl::FIXNUM_BYTES;
+operator<<(std::ostream &os, const fixnum_array<fixnum> *fn_arr) {
+    constexpr int fn_bytes = fixnum::BYTES;
     constexpr size_t bufsz = 4096;
     uint8_t arr[bufsz];
     int nelts;
@@ -210,24 +237,30 @@ operator<<(std::ostream &os, const fixnum_array<fixnum_impl> *fn_arr) {
 }
 
 
-template< template <typename> class Func, typename fixnum_impl, typename... Args >
+template< template <typename> class Func, typename fixnum, typename... Args >
 __global__ void
 dispatch(int nelts, Args... args) {
     // Get the slot index for the current thread.
     int blk_tid_offset = blockDim.x * blockIdx.x;
     int tid_in_blk = threadIdx.x;
-    int idx = (blk_tid_offset + tid_in_blk) / fixnum_impl::SLOT_WIDTH;
+    int idx = (blk_tid_offset + tid_in_blk) / fixnum::SLOT_WIDTH;
 
     if (idx < nelts) {
-        Func<fixnum_impl> fn;
-        fn(fixnum_impl::load(args, idx)...);
+        Func<fixnum> fn;
+        // FIXME: This offset calculation is entwined with fixnum layout and so
+        // belongs somewhere else.
+        int off = idx * fixnum::layout::WIDTH + fixnum::layout::laneIdx();
+        // FIXME: This is hiding a mortal sin against memory
+        // aliasing/management/type-safety.
+        fn(args[off]...);
+        //fn(fixnum::load(as_byte_ptr(args), idx)...);
     }
 }
 
-template< typename fixnum_impl >
+template< typename fixnum >
 template< template <typename> class Func, typename... Args >
 void
-fixnum_array<fixnum_impl>::map(Args... args) {
+fixnum_array<fixnum>::map(Args... args) {
     // TODO: Set this to the number of threads on a single SM on the host GPU.
     constexpr int BLOCK_SIZE = 192;
 
@@ -239,11 +272,10 @@ fixnum_array<fixnum_impl>::map(Args... args) {
 
     int nelts = std::min( { args->length()... } );
 
-    // FIXME: Check this calculation
-    constexpr int fixnums_per_block = BLOCK_SIZE / fixnum_impl::SLOT_WIDTH;
+    constexpr int fixnums_per_block = BLOCK_SIZE / fixnum::SLOT_WIDTH;
 
     // FIXME: nblocks could be too big for a single kernel call to handle
-    int nblocks = iceil(nelts, fixnums_per_block);
+    int nblocks = ceilquo(nelts, fixnums_per_block);
 
     // nblocks > 0 iff nelts > 0
     if (nblocks > 0) {
@@ -253,7 +285,7 @@ fixnum_array<fixnum_impl>::map(Args... args) {
 //         cuda_stream_attach_mem(stream, ptr);
         cuda_check(cudaStreamSynchronize(stream), "stream sync");
 
-        dispatch<Func, fixnum_impl ><<< nblocks, BLOCK_SIZE, 0, stream >>>(nelts, args->ptr...);
+        dispatch<Func, fixnum ><<< nblocks, BLOCK_SIZE, 0, stream >>>(nelts, args->ptr...);
 
         cuda_check(cudaPeekAtLastError(), "kernel invocation/run");
         cuda_check(cudaStreamSynchronize(stream), "stream sync");
