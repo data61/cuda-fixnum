@@ -1,14 +1,11 @@
 #pragma once
 
-#include "util/primitives.cu"
 #include "functions/monty_mul.cu"
 #include "functions/multi_modexp.cu"
 
-template< typename fixnum_impl >
+template< typename fixnum >
 class modexp {
 public:
-    typedef typename fixnum_impl::fixnum fixnum;
-
     __device__ modexp(fixnum mod, fixnum exp_)
         : mexp(mod), exp(exp_) { }
 
@@ -17,7 +14,7 @@ public:
     }
 
 private:
-    const multi_modexp<fixnum_impl> mexp;
+    const multi_modexp<fixnum> mexp;
     fixnum exp;
 };
 

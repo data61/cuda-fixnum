@@ -2,20 +2,18 @@
 
 #include "functions/monty_mul.cu"
 
-template< typename fixnum_impl, int WINDOW_SIZE = 5 >
+template< typename fixnum, int WINDOW_SIZE = 5 >
 class multi_modexp {
     static_assert(WINDOW_SIZE >= 1 && WINDOW_SIZE <= 7,
                   "Invalid or unreasonable window size specified.");
-    static constexpr int WIDTH = fixnum_impl::SLOT_WIDTH;
-    static constexpr int WORD_BITS = fixnum_impl::WORD_BITS;
+    static constexpr int WIDTH = fixnum::SLOT_WIDTH;
+    typedef typename fixnum::digit digit;
 
     // TODO: Generalise multi_modexp so that it can work with any modular
     // multiplication algorithm.
-    const monty_mul<fixnum_impl> monty;
+    const monty_mul<fixnum> monty;
 
 public:
-    typedef typename fixnum_impl::fixnum fixnum;
-
     __device__ multi_modexp(fixnum mod)
     : monty(mod) { }
 
@@ -63,9 +61,9 @@ k_ary_window_params(
  * [HAC, Algo 14.83] since there the number of squarings depends on
  * the 2-adic valuation of the window value.
  */
-template< typename fixnum_impl, int WINDOW_SIZE >
+template< typename fixnum, int WINDOW_SIZE >
 __device__ void
-multi_modexp<fixnum_impl, WINDOW_SIZE>::operator()(fixnum &z, fixnum x, fixnum e) const
+multi_modexp<fixnum, WINDOW_SIZE>::operator()(fixnum &z, fixnum x, fixnum e) const
 {
     // TODO: WINDOW_MAX should be determined by the length of e, or --
     // better -- by experiment.  The number of multiplications for
@@ -81,10 +79,8 @@ multi_modexp<fixnum_impl, WINDOW_SIZE>::operator()(fixnum &z, fixnum x, fixnum e
     // TODO: This enum should be integrated with the similar code in
     // monty_modexp above.
     static constexpr int WINDOW_MAIN_BITS = WINDOW_SIZE;
-    static constexpr int WINDOW_REM_BITS = WORD_BITS % WINDOW_SIZE;
+    static constexpr int WINDOW_REM_BITS = digit::BITS % WINDOW_SIZE;
     static constexpr int WINDOW_MAX = (1U << WINDOW_MAIN_BITS);
-    static constexpr int WINDOW_MAIN_MASK = (1U << WINDOW_MAIN_BITS) - 1;
-    static constexpr int WINDOW_REM_MASK = (1U << WINDOW_REM_BITS) - 1;
 
     /* G[t] = z^t, t >= 0 */
     fixnum G[WINDOW_MAX];
@@ -97,28 +93,32 @@ multi_modexp<fixnum_impl, WINDOW_SIZE>::operator()(fixnum &z, fixnum x, fixnum e
 
     z = G[0];
     for (int i = WIDTH - 1; i >= 0; --i) {
-        fixnum f = fixnum_impl::get(e, i);
+        digit f = fixnum::get(e, i);
 
         // TODO: The squarings are noops on the first iteration (i =
         // w-1) and should be removed.
         //
         // Window decomposition: WORD_BITS = q * 5 + r
-        int win;
-        for (int j = WORD_BITS - WINDOW_MAIN_BITS; j >= 0; j -= WINDOW_MAIN_BITS) {
+        digit win; // TODO: Morally this should be an int
+        for (int j = digit::BITS - WINDOW_MAIN_BITS; j >= 0; j -= WINDOW_MAIN_BITS) {
             // TODO: For some bizarre reason, it is significantly
             // faster to do this loop than it is to unroll the 5
             // statements manually.  Idem for the remainder below.
             // Investigate how this is even possible!
             for (int k = 0; k < WINDOW_MAIN_BITS; ++k)
                 monty(z, z);
-            win = (f >> j) & WINDOW_MAIN_MASK;
+            digit fj;
+            // win = (f >> j) & WINDOW_MAIN_MASK;
+            digit::rshift(fj, f, j);
+            digit::rem_2exp(win, fj, WINDOW_MAIN_BITS);
             monty(z, z, G[win]);
         }
 
         // Remainder
         for (int k = 0; k < WINDOW_REM_BITS; ++k)
             monty(z, z);
-        win = f & WINDOW_REM_MASK;
+        //win = f & WINDOW_REM_MASK;
+        digit::rem_2exp(win, f, WINDOW_REM_BITS);
         monty(z, z, G[win]);
     }
     monty.from_monty(z, z);

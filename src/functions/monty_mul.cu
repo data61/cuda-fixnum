@@ -1,14 +1,11 @@
 #pragma once
 
-#include "util/primitives.cu"
 #include "functions/modinv.cu"
 #include "functions/quorem_preinv.cu"
 
-template< typename fixnum_impl >
+template< typename fixnum >
 class monty_mul {
 public:
-    typedef typename fixnum_impl::fixnum fixnum;
-
     __device__ monty_mul(fixnum modulus);
 
     /**
@@ -33,7 +30,7 @@ public:
     // TODO: Might be worth specialising monty_mul for this case, since one of
     // the operands is known.
     __device__ void from_monty(fixnum &z, fixnum x) const {
-        (*this)(z, x, fixnum_impl::one());
+        (*this)(z, x, fixnum::one());
     }
 
     /*
@@ -44,9 +41,9 @@ public:
     }
 
 private:
-    typedef typename fixnum_impl::word_tp word_tp;
+    typedef typename fixnum::digit digit;
     // TODO: Check whether we can get rid of this declaration
-    static constexpr int WIDTH = fixnum_impl::SLOT_WIDTH;
+    static constexpr int WIDTH = fixnum::SLOT_WIDTH;
 
     // FIXME: Get rid of this hack
     int is_valid;
@@ -58,27 +55,27 @@ private:
     // Rsqr = R^2 % mod
     fixnum Rsqr_mod;
     // inv_mod * mod = -1 % 2^WORD_BITS.
-    word_tp  inv_mod;
+    digit  inv_mod;
 
     // TODO: We save this after using it in the constructor; work out
     // how to make it available for later use. For example, it could
     // be used to reduce arguments to modexp prior to the main
     // iteration.
-    quorem_preinv<fixnum_impl> modrem;
+    quorem_preinv<fixnum> modrem;
 
     __device__ void normalise(fixnum &x, int msb, fixnum m) const;
 };
 
 
-template< typename fixnum_impl >
+template< typename fixnum >
 __device__
-monty_mul<fixnum_impl>::monty_mul(fixnum modulus)
+monty_mul<fixnum>::monty_mul(fixnum modulus)
 : mod(modulus), modrem(modulus)
 {
     // mod must be odd > 1 in order to calculate R^-1 mod "mod".
     // FIXME: Handle these errors properly
-    if (fixnum_impl::two_valuation(modulus) != 0 //fixnum_impl::get(modulus, 0) & 1 == 0
-            || fixnum_impl::cmp(modulus, fixnum_impl::one()) == 0) {
+    if (fixnum::two_valuation(modulus) != 0 //fixnum::get(modulus, 0) & 1 == 0
+            || fixnum::cmp(modulus, fixnum::one()) == 0) {
         is_valid = 0;
         return;
     }
@@ -87,66 +84,69 @@ monty_mul<fixnum_impl>::monty_mul(fixnum modulus)
     fixnum Rsqr_hi, Rsqr_lo;
 
     // R_mod = R % mod
-    modrem(R_mod, fixnum_impl::one(), fixnum_impl::zero());
-    fixnum_impl::sqr_wide(Rsqr_hi, Rsqr_lo, R_mod);
+    modrem(R_mod, fixnum::one(), fixnum::zero());
+    fixnum::sqr_wide(Rsqr_hi, Rsqr_lo, R_mod);
     // Rsqr_mod = R^2 % mod
     modrem(Rsqr_mod, Rsqr_hi, Rsqr_lo);
 
     // TODO: Tidy this up.
-    modinv<fixnum_impl> minv;
-    minv(inv_mod, mod, fixnum_impl::WORD_BITS);
-    inv_mod = -inv_mod;
+    modinv<fixnum> minv;
+    fixnum im;
+    minv(im, mod, digit::BITS);
+    digit::neg(inv_mod, im);
     // TODO: Ugh.
-    typedef typename fixnum_impl::slot_layout slot_layout;
+    typedef typename fixnum::layout layout;
     // TODO: Can we avoid this broadcast?
-    inv_mod = slot_layout::shfl(inv_mod, 0);
-    assert(1 + inv_mod * slot_layout::shfl(mod, 0) == 0);
+    inv_mod = layout::shfl(inv_mod, 0);
+    assert(1 + inv_mod * layout::shfl(mod, 0) == 0);
 }
 
 /*
- * z = x * y (mod me->mod) in Monty form.
+ * z = x * y (mod) in Monty form.
  *
  * Spliced multiplication/reduction implementation of Montgomery
  * modular multiplication.  Specifically it is the CIOS (coursely
  * integrated operand scanning) splice.
  */
-template< typename fixnum_impl >
+template< typename fixnum >
 __device__ void
-monty_mul<fixnum_impl>::operator()(fixnum &z, fixnum x, fixnum y) const
+monty_mul<fixnum>::operator()(fixnum &z, fixnum x, fixnum y) const
 {
-    typedef typename fixnum_impl::slot_layout slot_layout;
+    typedef typename fixnum::layout layout;
     // FIXME: Fix this hack!
-    if (!is_valid) { z = 0; return; }
+    z = fixnum::zero();
+    if (!is_valid) { return; }
 
-    int L = slot_layout::laneIdx();
-    const word_tp tmp = x * fixnum_impl::get(y, 0) * inv_mod;
-    word_tp cy = 0;
-    z = 0;
+    int L = layout::laneIdx();
+    digit tmp;
+    digit::mul_lo(tmp, x, inv_mod);
+    digit::mul_lo(tmp, tmp, fixnum::get(y, 0));
+    digit cy = digit::zero();
 
     for (int i = 0; i < WIDTH; ++i) {
-        word_tp u;
-        word_tp xi = fixnum_impl::get(x, i);
-        word_tp z0 = fixnum_impl::get(z, 0);
-        word_tp tmpi = fixnum_impl::get(tmp, i);
+        digit u;
+        digit xi = fixnum::get(x, i);
+        digit z0 = fixnum::get(z, 0);
+        digit tmpi = fixnum::get(tmp, i);
 
-        umad_lo(u, z0, inv_mod, tmpi);
+        digit::mad_lo(u, z0, inv_mod, tmpi);
 
-        umad_lo_cc(z, cy, mod, u, z);
-        umad_lo_cc(z, cy, y, xi, z);
+        digit::mad_lo_cc(z, cy, mod, u, z);
+        digit::mad_lo_cc(z, cy, y, xi, z);
 
-        assert(L || !z);  // z[0] must be 0
-        z = slot_layout::shfl_down0(z, 1); // Shift right one word
+        assert(L || digit::is_zero(z));  // z[0] must be 0
+        z = layout::shfl_down0(z, 1); // Shift right one word
 
-        z += cy;
-        cy = z < cy;
+        digit::add_cy(z, cy, z, cy);
 
-        umad_hi_cc(z, cy, mod, u, z);
-        umad_hi_cc(z, cy, y, xi, z);
+        digit::mad_hi_cc(z, cy, mod, u, z);
+        digit::mad_hi_cc(z, cy, y, xi, z);
     }
     // Resolve carries
-    word_tp msw = fixnum_impl::top_digit(cy);
-    cy = slot_layout::shfl_up0(cy, 1); // left shift by 1
-    msw += fixnum_impl::add_cy(z, z, cy);
+    digit msw = fixnum::top_digit(cy);
+    cy = layout::shfl_up0(cy, 1); // left shift by 1
+    fixnum::add_cy(z, cy, z, cy);
+    digit::add(msw, msw, cy);
     assert(msw == !!msw); // msw = 0 or 1.
 
     normalise(z, (int) msw, mod);
@@ -157,15 +157,15 @@ monty_mul<fixnum_impl>::operator()(fixnum &z, fixnum x, fixnum y) const
  *
  * Assumes X < 2*m, i.e. msb = 0 or 1, and if msb = 1, then x < m.
  */
-template< typename fixnum_impl >
+template< typename fixnum >
 __device__ void
-monty_mul<fixnum_impl>::normalise(fixnum &x, int msb, fixnum m) const {
+monty_mul<fixnum>::normalise(fixnum &x, int msb, fixnum m) const {
     fixnum r;
-    int br;
+    digit br;
 
     // br = 0 ==> x >= m
-    br = fixnum_impl::sub_br(r, x, m);
-    if (msb || !br) {
+    fixnum::sub_br(r, br, x, m);
+    if (msb || digit::is_zero(br)) {
         // If the msb was set, then we must have had to borrow.
         assert(!msb || msb == br);
         x = r;
