@@ -1,5 +1,4 @@
 #include <gtest/gtest.h>
-#include <tuple>
 #include <iomanip>
 #include <vector>
 #include <memory>
@@ -10,6 +9,7 @@
 #include <sstream>
 
 #include "array/fixnum_array.h"
+#include "fixnum/word_fixnum.cu"
 #include "fixnum/fixnum.cu"
 #include "functions/monty_mul.cu"
 #include "functions/modexp.cu"
@@ -58,27 +58,27 @@ arrays_are_equal(
 }
 
 
-template< typename fixnum_impl_ >
+template< typename fixnum_ >
 struct TypedPrimitives : public ::testing::Test {
-    typedef fixnum_impl_ fixnum_impl;
+    typedef fixnum_ fixnum;
 
     TypedPrimitives() {}
 };
 
 typedef ::testing::Types<
-    default_fixnum_impl<4, uint32_t>,
-    default_fixnum_impl<8, uint32_t>,
-    default_fixnum_impl<16, uint32_t>,
-    default_fixnum_impl<32, uint32_t>,
-    default_fixnum_impl<64, uint32_t>,
-    default_fixnum_impl<128, uint32_t>,
+    warp_fixnum<4, u32_fixnum>,
+    warp_fixnum<8, u32_fixnum>,
+    warp_fixnum<16, u32_fixnum>,
+    warp_fixnum<32, u32_fixnum>,
+    warp_fixnum<64, u32_fixnum>,
+    warp_fixnum<128, u32_fixnum>,
 
-    default_fixnum_impl<8, uint64_t>,
-    default_fixnum_impl<16, uint64_t>,
-    default_fixnum_impl<32, uint64_t>,
-    default_fixnum_impl<64, uint64_t>,
-    default_fixnum_impl<128, uint64_t>,
-    default_fixnum_impl<256, uint64_t>
+    warp_fixnum<8, u64_fixnum>,
+    warp_fixnum<16, u64_fixnum>,
+    warp_fixnum<32, u64_fixnum>,
+    warp_fixnum<64, u64_fixnum>,
+    warp_fixnum<128, u64_fixnum>,
+    warp_fixnum<256, u64_fixnum>
 > FixnumImplTypes;
 
 TYPED_TEST_CASE(TypedPrimitives, FixnumImplTypes);
@@ -95,13 +95,13 @@ uint32_t read_int(ifstream &file) {
     return res;
 }
 
-template<typename fixnum_impl>
+template<typename fixnum>
 void read_tcases(
         vector<byte_array> &res,
-        fixnum_array<fixnum_impl> *&xs,
+        fixnum_array<fixnum> *&xs,
         const string &fname,
         int nargs) {
-    static constexpr int fixnum_bytes = fixnum_impl::FIXNUM_BYTES;
+    static constexpr int fixnum_bytes = fixnum::BYTES;
     ifstream file(fname + "_" + std::to_string(fixnum_bytes));
     die_if( ! file.good(), "Couldn't open file.");
 
@@ -119,7 +119,7 @@ void read_tcases(
     uint8_t *buf = new uint8_t[nbytes];
 
     read_into(file, buf, nbytes);
-    xs = fixnum_array<fixnum_impl>::create(buf, nbytes, fixnum_bytes);
+    xs = fixnum_array<fixnum>::create(buf, nbytes, fixnum_bytes);
 
     // ninvecs = number of input combinations
     uint32_t ninvecs = 1;
@@ -136,14 +136,14 @@ void read_tcases(
     delete[] buf;
 }
 
-template< typename fixnum_impl, typename tcase_iter >
+template< typename fixnum, typename tcase_iter >
 void check_result(
     tcase_iter &tcase, uint32_t vec_len,
-    initializer_list<const fixnum_array<fixnum_impl> *> args,
+    initializer_list<const fixnum_array<fixnum> *> args,
     int skip = 1,
     uint32_t nvecs = 1)
 {
-    static constexpr int fixnum_bytes = fixnum_impl::FIXNUM_BYTES;
+    static constexpr int fixnum_bytes = fixnum::BYTES;
     size_t total_vec_len = vec_len * nvecs;
     size_t nbytes = fixnum_bytes * total_vec_len;
     // TODO: The fixnum_arrays are in managed memory; there isn't really any
@@ -161,19 +161,20 @@ void check_result(
     }
 }
 
-template< typename fixnum_impl >
+template< typename fixnum >
 struct add_cy {
-    typedef typename fixnum_impl::fixnum fixnum;
-
     __device__ void operator()(fixnum &r, fixnum &cy, fixnum a, fixnum b) {
-        int c = fixnum_impl::add_cy(r, a, b);
-        cy = (fixnum_impl::slot_layout::laneIdx() == 0) ? c : 0;
+        typedef typename fixnum::digit digit;
+        digit c;
+        fixnum::add_cy(r, c, a, b);
+        // TODO: This is like digit_to_fixnum
+        cy = (fixnum::layout::laneIdx() == 0) ? c : digit::zero();
     }
 };
 
 TYPED_TEST(TypedPrimitives, add_cy) {
-    typedef typename TestFixture::fixnum_impl fixnum_impl;
-    typedef fixnum_array<fixnum_impl> fixnum_array;
+    typedef typename TestFixture::fixnum fixnum;
+    typedef fixnum_array<fixnum> fixnum_array;
 
     fixnum_array *res, *cys, *xs;
     vector<byte_array> tcases;
@@ -196,19 +197,19 @@ TYPED_TEST(TypedPrimitives, add_cy) {
 }
 
 
-template< typename fixnum_impl >
+template< typename fixnum >
 struct sub_br {
-    typedef typename fixnum_impl::fixnum fixnum;
-
     __device__ void operator()(fixnum &r, fixnum &br, fixnum a, fixnum b) {
-        int bb = fixnum_impl::sub_br(r, a, b);
-        br = (fixnum_impl::slot_layout::laneIdx() == 0) ? bb : 0;
+        typedef typename fixnum::digit digit;
+        digit bb;
+        fixnum::sub_br(r, bb, a, b);
+        br = (fixnum::layout::laneIdx() == 0) ? bb : digit::zero();
     }
 };
 
 TYPED_TEST(TypedPrimitives, sub_br) {
-    typedef typename TestFixture::fixnum_impl fixnum_impl;
-    typedef fixnum_array<fixnum_impl> fixnum_array;
+    typedef typename TestFixture::fixnum fixnum;
+    typedef fixnum_array<fixnum> fixnum_array;
 
     fixnum_array *res, *brs, *xs;
     vector<byte_array> tcases;
@@ -230,18 +231,16 @@ TYPED_TEST(TypedPrimitives, sub_br) {
     delete xs;
 }
 
-template< typename fixnum_impl >
+template< typename fixnum >
 struct mul_lo {
-    typedef typename fixnum_impl::fixnum fixnum;
-
     __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
-        fixnum_impl::mul_lo(r, a, b);
+        fixnum::mul_lo(r, a, b);
     }
 };
 
 TYPED_TEST(TypedPrimitives, mul_lo) {
-    typedef typename TestFixture::fixnum_impl fixnum_impl;
-    typedef fixnum_array<fixnum_impl> fixnum_array;
+    typedef typename TestFixture::fixnum fixnum;
+    typedef fixnum_array<fixnum> fixnum_array;
 
     fixnum_array *res, *xs;
     vector<byte_array> tcases;
@@ -261,18 +260,16 @@ TYPED_TEST(TypedPrimitives, mul_lo) {
     delete xs;
 }
 
-template< typename fixnum_impl >
+template< typename fixnum >
 struct mul_hi {
-    typedef typename fixnum_impl::fixnum fixnum;
-
     __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
-        fixnum_impl::mul_hi(r, a, b);
+        fixnum::mul_hi(r, a, b);
     }
 };
 
 TYPED_TEST(TypedPrimitives, mul_hi) {
-    typedef typename TestFixture::fixnum_impl fixnum_impl;
-    typedef fixnum_array<fixnum_impl> fixnum_array;
+    typedef typename TestFixture::fixnum fixnum;
+    typedef fixnum_array<fixnum> fixnum_array;
 
     fixnum_array *res, *xs;
     vector<byte_array> tcases;
@@ -292,18 +289,16 @@ TYPED_TEST(TypedPrimitives, mul_hi) {
     delete xs;
 }
 
-template< typename fixnum_impl >
+template< typename fixnum >
 struct mul_wide {
-    typedef typename fixnum_impl::fixnum fixnum;
-
     __device__ void operator()(fixnum &s, fixnum &r, fixnum a, fixnum b) {
-        fixnum_impl::mul_wide(s, r, a, b);
+        fixnum::mul_wide(s, r, a, b);
     }
 };
 
 TYPED_TEST(TypedPrimitives, mul_wide) {
-    typedef typename TestFixture::fixnum_impl fixnum_impl;
-    typedef fixnum_array<fixnum_impl> fixnum_array;
+    typedef typename TestFixture::fixnum fixnum;
+    typedef fixnum_array<fixnum> fixnum_array;
 
     fixnum_array *his, *los, *xs;
     vector<byte_array> tcases;
@@ -326,19 +321,17 @@ TYPED_TEST(TypedPrimitives, mul_wide) {
 }
 
 
-template< typename fixnum_impl >
+template< typename fixnum >
 struct my_modexp {
-    typedef typename fixnum_impl::fixnum fixnum;
-
     __device__ void operator()(fixnum &z, fixnum x, fixnum e, fixnum m) {
-        modexp<fixnum_impl> me(m, e);
+        modexp<fixnum> me(m, e);
         me(z, x);
     };
 };
 
 TYPED_TEST(TypedPrimitives, modexp) {
-    typedef typename TestFixture::fixnum_impl fixnum_impl;
-    typedef fixnum_array<fixnum_impl> fixnum_array;
+    typedef typename TestFixture::fixnum fixnum;
+    typedef fixnum_array<fixnum> fixnum_array;
 
     fixnum_array *res, *input, *xs, *zs;
     vector<byte_array> tcases;
@@ -366,47 +359,44 @@ TYPED_TEST(TypedPrimitives, modexp) {
     delete zs;
 }
 
-template< typename fixnum_impl >
+template< typename fixnum >
 struct pencrypt {
-    typedef typename fixnum_impl::fixnum fixnum;
-
     __device__ void operator()(fixnum &z, fixnum p, fixnum q, fixnum r, fixnum m) {
         fixnum n;
-        fixnum_impl::mul_lo(n, p, q);
-        paillier_encrypt<fixnum_impl> enc(n);
+        fixnum::mul_lo(n, p, q);
+        paillier_encrypt<fixnum> enc(n);
         enc(z, m, r);
     };
 };
 
-template< typename fixnum_impl >
+template< typename fixnum >
 struct pdecrypt {
-    typedef typename fixnum_impl::fixnum fixnum;
-
     __device__ void operator()(fixnum &z, fixnum ct, fixnum p, fixnum q, fixnum r, fixnum m) {
-        if (fixnum_impl::cmp(p, q) == 0
-              || fixnum_impl::cmp(r, p) == 0
-              || fixnum_impl::cmp(r, q) == 0) {
-            z = 0;
+        if (fixnum::cmp(p, q) == 0
+              || fixnum::cmp(r, p) == 0
+              || fixnum::cmp(r, q) == 0) {
+            z = fixnum::zero();
             return;
         }
-        paillier_decrypt<fixnum_impl> dec(p, q);
-        dec(z, 0, ct);
+        paillier_decrypt<fixnum> dec(p, q);
+        dec(z, fixnum::zero(), ct);
         fixnum n;
-        fixnum_impl::mul_lo(n, p, q);
-        quorem_preinv<fixnum_impl> qr(n);
-        qr(m, 0, m);
+        fixnum::mul_lo(n, p, q);
+        quorem_preinv<fixnum> qr(n);
+        qr(m, fixnum::zero(), m);
 
-        z = (z != m);
+        // z = (z != m)
+        z = fixnum::digit( !! fixnum::cmp(z, m));
     };
 };
 
 TYPED_TEST(TypedPrimitives, paillier) {
-    typedef typename TestFixture::fixnum_impl fixnum_impl;
+    typedef typename TestFixture::fixnum fixnum;
 
-    typedef fixnum_impl ctxt;
-    // TODO: FIXNUM_BYTES/2 only works when FIXNUM_BYTES > 4
-    //typedef default_fixnum_impl<ctxt::FIXNUM_BYTES/2, typename ctxt::word_tp> ptxt;
-    typedef fixnum_impl ptxt;
+    typedef fixnum ctxt;
+    // TODO: BYTES/2 only works when BYTES > 4
+    //typedef default_fixnum<ctxt::BYTES/2, typename ctxt::word_tp> ptxt;
+    typedef fixnum ptxt;
 
     typedef fixnum_array<ctxt> ctxt_array;
     typedef fixnum_array<ptxt> ptxt_array;
@@ -434,7 +424,7 @@ TYPED_TEST(TypedPrimitives, paillier) {
 
                 ptxt_array::template map<pdecrypt>(pt, ct, p, q, r, m);
 
-                size_t nbytes = vec_len * ctxt::FIXNUM_BYTES;
+                size_t nbytes = vec_len * ctxt::BYTES;
                 const uint8_t *zptr = reinterpret_cast<const uint8_t *>(zeros->get_ptr());
                 const uint8_t *ptptr = reinterpret_cast<const uint8_t *>(pt->get_ptr());
                 EXPECT_TRUE(arrays_are_equal(zptr, nbytes, ptptr, nbytes));
