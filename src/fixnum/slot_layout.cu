@@ -32,7 +32,7 @@ static constexpr int WARPSIZE = 32;
  * actually achieves anything.
  */
 
-template<int width = WARPSIZE>
+template<typename T, int width = WARPSIZE>
 struct slot_layout
 {
     static_assert(width > 0 && !(WARPSIZE & (width - 1)),
@@ -90,7 +90,7 @@ struct slot_layout
     int
     offset() {
         // Thread index within the (full) warp.
-        int T = threadIdx.x & (WARPSIZE - 1);
+        int tid = threadIdx.x & (WARPSIZE - 1);
 
         // Recall: x mod y = x - y*floor(x/y), so
         //
@@ -99,10 +99,10 @@ struct slot_layout
         //                 = threadIdx - (threadIdx & (width - 1))
         //                 // TODO: Do use this last formulation!
         //                 = set bottom log2(width) bits of threadIdx to zero
-        //                 = T & ~mask ??
+        //                 = T & ~mask ??  or "(T >> width) << width"
         //
         // since width = 2^n.
-        return T - (T & (width - 1));
+        return tid - (tid & (width - 1));
     }
 
 #if 0
@@ -126,8 +126,8 @@ struct slot_layout
      * Like ballot(tst) but restrict the result to the containing slot
      * of size width.
      */
-    static __device__ __forceinline__
-    uint32_t
+    __device__ __forceinline__
+    static uint32_t
     ballot(int tst) {
         uint32_t b = __ballot(tst);
         b >>= offset();
@@ -137,76 +137,28 @@ struct slot_layout
     /*
      * Wrappers for notation consistency.
      */
-    static __device__ __forceinline__
-    uint32_t
-    shfl(const uint32_t var, int srcLane) {
-        return __shfl(var, srcLane, width);
+    __device__ __forceinline__
+    static T
+    shfl(T var, int srcLane) {
+        return __shfl_sync(0xFFFFFFFF, var, srcLane, width);
     }
 
-    static __device__ __forceinline__
-    uint32_t
-    shfl_up(uint32_t var, unsigned int delta) {
-        return __shfl_up(var, delta, width);
+    __device__ __forceinline__
+    static T
+    shfl_up(T var, unsigned int delta) {
+        return __shfl_up_sync(0xFFFFFFFF, var, delta, width);
     }
 
-    static __device__ __forceinline__
-    uint32_t
-    shfl_down(uint32_t var, unsigned int delta) {
-        return __shfl_down(var, delta, width);
-    }
-
-    /*
-     * The next three functions extend the usual shuffle functions to 64bit
-     * parameters.  See CUDA C Programming Guide, B.14:
-     *
-     *   http://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#warp-shuffle-functions
-     *
-     * TODO: These are now available in CUDA 9.
-     */
-    static __device__ __forceinline__
-    uint64_t
-    shfl(const uint64_t &var, int srcLane) {
-        uint64_t res;
-        uint32_t hi, lo;
-
-        asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
-        hi = shfl(hi, srcLane);
-        lo = shfl(lo, srcLane);
-        asm("mov.b64 %0, { %1, %2 };" : "=l"(res) : "r"(lo), "r"(hi));
-        return res;
-    }
-
-    static __device__ __forceinline__
-    uint64_t
-    shfl_up(uint64_t var, unsigned int delta) {
-        uint64_t res;
-        uint32_t hi, lo;
-
-        asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
-        hi = shfl_up(hi, delta);
-        lo = shfl_up(lo, delta);
-        asm("mov.b64 %0, { %1, %2 };" : "=l"(res) : "r"(lo), "r"(hi));
-        return res;
-    }
-
-    static __device__ __forceinline__
-    uint64_t
-    shfl_down(uint64_t var, unsigned int delta) {
-        uint64_t res;
-        uint32_t hi, lo;
-
-        asm("mov.b64 { %0, %1 }, %2;" : "=r"(lo), "=r"(hi) : "l"(var));
-        hi = shfl_down(hi, delta);
-        lo = shfl_down(lo, delta);
-        asm("mov.b64 %0, { %1, %2 };" : "=l"(res) : "r"(lo), "r"(hi));
-        return res;
+    __device__ __forceinline__
+    static T
+    shfl_down(T var, unsigned int delta) {
+        return __shfl_down_sync(0xFFFFFFFF, var, delta, width);
     }
 
     // NB: Assumes delta <= width + L. (There should be no reason for
     // it ever to be more than width.)
-    template< typename T >
-    static __device__ __forceinline__
-    T
+    __device__ __forceinline__
+    static T
     rotate_up(T var, unsigned int delta) {
         int L = laneIdx();
         // Don't need to reduce srcLane modulo width; that is done by __shfl.
@@ -214,9 +166,8 @@ struct slot_layout
         return shfl(var, srcLane);
     }
 
-    template< typename T >
-    static __device__ __forceinline__
-    T
+    __device__ __forceinline__
+    static T
     rotate_down(T var, unsigned int delta) {
         int L = laneIdx();
         // Don't need to reduce srcLane modulo width; that is done by __shfl.
@@ -227,25 +178,23 @@ struct slot_layout
     /*
      * Like shfl_up but set bottom delta variables to zero.
      */
-    template< typename T >
-    static __device__ __forceinline__
-    T
+    __device__ __forceinline__
+    static T
     shfl_up0(T var, unsigned int delta) {
         T res = shfl_up(var, delta);
         //return res & -(T)(laneIdx() > 0);
-        return laneIdx() < delta ? 0 : res;
+        return laneIdx() < delta ? T(0) : res;
     }
 
     /*
      * Like shfl_down but set top delta variables to zero.
      */
-    template< typename T >
-    static __device__ __forceinline__
-    T
+    __device__ __forceinline__
+    static T
     shfl_down0(T var, unsigned int delta) {
         T res = shfl_down(var, delta);
         //return res & -(T)(laneIdx() < toplaneIdx());
-        return laneIdx() >= (width - delta) ? 0 : res;
+        return laneIdx() >= (width - delta) ? T(0) : res;
     }
 
 private:
