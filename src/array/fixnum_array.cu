@@ -65,7 +65,7 @@ fixnum_array<fixnum>::create(size_t nelts, T init) {
     std::copy(in, in + sizeof(T), elt);
 
     for (uint32_t i = 0; i < nelts; ++i, p += fixnum::BYTES)
-        std::copy(elt, elt + fixnum::BYTES, p);
+        fixnum::from_bytes(p, elt, fixnum::BYTES);
     return a;
 }
 
