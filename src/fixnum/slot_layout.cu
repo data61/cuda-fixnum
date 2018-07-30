@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 // For some reason the warpSize value provided by CUDA is not
 // considered a constant value, so cannot be used in constexprs or
 // template parameters or static_asserts. Hence we must use WARPSIZE
@@ -69,7 +71,7 @@ struct slot_layout
      *
      * Useful in conjunction with offset() and __ballot().
      */
-    static constexpr uint32_t mask = (1UL << width) - 1UL;
+    static constexpr std::uint32_t mask = (1UL << width) - 1UL;
 
     /*
      * Return the thread index within the warp where the slot
