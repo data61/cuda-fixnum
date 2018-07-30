@@ -1,2 +1,8 @@
 # cuda-fixnum
-Fixed-precision SIMD library that targets CUDA.
+`cuda-fixnum` is a fixed-precision SIMD library that targets CUDA. It provides the apparatus necessary to easily create efficient functions that operate on vectors of _n_-bit integers, where _n_ can be much larger than the size of a usual machine or device register.  Currently supported values of _n_ are 32, 64, 128, 256, 512, 1024, and 2048 (larger values will be possible in a forthcoming release).
+
+The primary use case for fast arithmetic of numbers in the range covered by `cuda-fixnum` is in cryptography and computational number theory. As such, special attention is given to support modular arithmetic; this is used in an example implementation of the Paillier additively homomorphic encryption scheme and of elliptic curve scalar multiplication.  Future releases will provide additional support for operations useful to implementing Ring-LWE-based somewhat homomorphic encryption schemes.
+
+Finally, the library is designed to be _fast_. Through exploitation of warp-synchronous programming, vote functions, and deferred carry handling, the primitives of the library are currently competitive with the state-of-the-art in the literature for modular multiplication and modular exponentiation on GPUs.  The design of the library allows transparent substitution of the underlying arithmetic, allowing the user to select whichever performs best on the available hardware. Moreover, several algorithms, both novel and from the literature, will incorporated shortly that will improve performance by a further 25-50%.
+
+The library is currently at the alpha stage of development.  It has many rough edges, but most features are present and it is performant enough to be competitive.  Comments and questions are welcome!
