@@ -198,4 +198,4 @@ The principal author of `cuda-fixnum` is Dr Hamish Ivey-Law (@unzvfu). Email: _h
 
 `cuda-fixnum` is copyright (c) Commonwealth Scientific and Industrial Research Organisation (CSIRO).
 
-`cuda-fixnum` is released under the GPLv3 Licence with a CSIRO Disclaimer (see [LICENSE](cuda-fixnum/LICENCE) for details).
+`cuda-fixnum` is released under a modified MIT/BSD Open Source Licence (see [LICENSE](cuda-fixnum/LICENCE) for details).
