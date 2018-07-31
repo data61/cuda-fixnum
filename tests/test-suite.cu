@@ -234,7 +234,9 @@ TYPED_TEST(TypedPrimitives, sub_br) {
 template< typename fixnum >
 struct mul_lo {
     __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
-        fixnum::mul_lo(r, a, b);
+        fixnum rr;
+        fixnum::mul_lo(rr, a, b);
+        r = rr;
     }
 };
 
@@ -263,7 +265,9 @@ TYPED_TEST(TypedPrimitives, mul_lo) {
 template< typename fixnum >
 struct mul_hi {
     __device__ void operator()(fixnum &r, fixnum a, fixnum b) {
-        fixnum::mul_hi(r, a, b);
+        fixnum rr;
+        fixnum::mul_hi(rr, a, b);
+        r = rr;
     }
 };
 
@@ -292,7 +296,10 @@ TYPED_TEST(TypedPrimitives, mul_hi) {
 template< typename fixnum >
 struct mul_wide {
     __device__ void operator()(fixnum &s, fixnum &r, fixnum a, fixnum b) {
-        fixnum::mul_wide(s, r, a, b);
+        fixnum rr, ss;
+        fixnum::mul_wide(ss, rr, a, b);
+        s = ss;
+        r = rr;
     }
 };
 
@@ -325,7 +332,9 @@ template< typename fixnum >
 struct my_modexp {
     __device__ void operator()(fixnum &z, fixnum x, fixnum e, fixnum m) {
         modexp<fixnum> me(m, e);
-        me(z, x);
+        fixnum zz;
+        me(zz, x);
+        z = zz;
     };
 };
 
@@ -362,10 +371,11 @@ TYPED_TEST(TypedPrimitives, modexp) {
 template< typename fixnum >
 struct pencrypt {
     __device__ void operator()(fixnum &z, fixnum p, fixnum q, fixnum r, fixnum m) {
-        fixnum n;
+        fixnum n, zz;
         fixnum::mul_lo(n, p, q);
         paillier_encrypt<fixnum> enc(n);
-        enc(z, m, r);
+        enc(zz, m, r);
+        z = zz;
     };
 };
 
@@ -379,14 +389,14 @@ struct pdecrypt {
             return;
         }
         paillier_decrypt<fixnum> dec(p, q);
-        dec(z, fixnum::zero(), ct);
-        fixnum n;
+        fixnum n, zz;
+        dec(zz, fixnum::zero(), ct);
         fixnum::mul_lo(n, p, q);
         quorem_preinv<fixnum> qr(n);
         qr(m, fixnum::zero(), m);
 
         // z = (z != m)
-        z = fixnum::digit( !! fixnum::cmp(z, m));
+        z = fixnum::digit( !! fixnum::cmp(zz, m));
     };
 };
 
