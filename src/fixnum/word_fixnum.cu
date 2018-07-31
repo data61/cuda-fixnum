@@ -268,8 +268,8 @@ public:
     __device__ __forceinline__
     static int
     is_binary_power(uint_type x) {
-        static_assert(std::is_unsigned<uint_type>::value == true,
-                      "template type must be unsigned");
+        //static_assert(std::is_unsigned<uint_type>::value == true,
+        //              "template type must be unsigned");
         return ! (x & (x - 1));
     }
 
