@@ -191,3 +191,10 @@ The main sources for the algorithms in this library are
  - Brent, R. and Zimmermann, P., [_Modern Computer Arithmetic_](https://members.loria.fr/PZimmermann/mca/pub226.html), Cambridge University Press, 2010.
  - Menezes, A. J., van Oorschot, P. C. and Vanstone, S. A., [_Handbook of Applied Cryptography_](http://cacr.uwaterloo.ca/hac/), CRC Press, 5th printing, 2001. Chapter 14.
  - Granlund, T. and "the GMP development team", [_GNU MP: The GNU Multiple Precision Arithmetic Library_](https://gmplib.org), version 6.1.2.
+ 
+## Author and licence
+
+`cuda-fixnum` is the work of Dr Hamish Ivey-Law and copyright (c) Commonwealth
+Scientific and Industrial Research Organisation (CSIRO). `cuda-fixnum` released
+under the GPLv3 Licence with a CSIRO Disclaimer (see
+[LICENSE](cuda-fixnum/LICENCE) for details).
