@@ -119,3 +119,75 @@ void host_function() {
    ...
 }
 ```
+
+## Benchmarks
+
+Here is the output from a recent run of the benchmark with a GTX Titan X (Maxwell, 1GHz clock, 3072 cores):
+
+```
+$ bench/bench 5000000
+Function: mul_lo, #elts: 5000e3
+fixnum digit  total data   time       Kops/s
+ bits  bits     (MiB)    (seconds)
+   32    32      19.1     0.000    24630541.9
+   64    32      38.1     0.000    11547344.1
+  128    32      76.3     0.001     5091649.7
+  256    32     152.6     0.003     1775568.2
+  512    32     305.2     0.008      619578.7
+ 1024    32     610.4     0.030      166855.8
+
+   64    64      38.1     0.000    14619883.0
+  128    64      76.3     0.001     7824726.1
+  256    64     152.6     0.002     2908667.8
+  512    64     305.2     0.006      829875.5
+ 1024    64     610.4     0.023      221749.2
+ 2048    64    1220.7     0.087       57611.0
+
+
+Function: mul_wide, #elts: 5000e3
+fixnum digit  total data   time       Kops/s
+ bits  bits     (MiB)    (seconds)
+   32    32      19.1     0.000    25906735.8
+   64    32      38.1     0.000    10775862.1
+  128    32      76.3     0.001     3861003.9
+  256    32     152.6     0.005      985998.8
+  512    32     305.2     0.018      271164.4
+ 1024    32     610.4     0.060       83847.6
+
+   64    64      38.1     0.000    14662756.6
+  128    64      76.3     0.001     6765899.9
+  256    64     152.6     0.003     1904036.6
+  512    64     305.2     0.009      530278.9
+ 1024    64     610.4     0.036      140024.6
+ 2048    64    1220.7     0.129       38680.5
+
+
+Function: modexp, #elts: 50e3
+fixnum digit  total data   time       Kops/s
+ bits  bits     (MiB)    (seconds)
+   32    32       0.2     0.000      292397.7
+   64    32       0.4     0.001       68306.0
+  128    32       0.8     0.003       16388.1
+  256    32       1.5     0.017        3015.5
+  512    32       3.1     0.108         463.6
+ 1024    32       6.1     0.748          66.9
+
+   64    64       0.4     0.000      113378.7
+  128    64       0.8     0.002       20798.7
+  256    64       1.5     0.015        3403.2
+  512    64       3.1     0.105         476.8
+ 1024    64       6.1     0.658          76.0
+ 2048    64      12.2     4.959          10.1
+```
+
+It is interesting to note that performance is consistently better with 64-bit
+integer arithmetic, even though 64-bit registers are simulated on nVidia
+devices. Looks like my 32-bit integer arithmetic code could use some work!
+
+## Sources
+
+The main sources for the algorithms in this library are
+
+ - Brent, R. and Zimmermann, P., _[_Modern Computer Arithmetic_](https://members.loria.fr/PZimmermann/mca/pub226.html), Cambridge University Press, 2010.
+ - Menezes, A. J., van Oorschot, P. C. and Vanstone, S. A., [__Handbook of Applied Cryptography_](http://cacr.uwaterloo.ca/hac/), CRC Press, 5th printing, 2001. Chapter 14.
+ - Granlund, T. and "the GMP development team", [_GNU MP: The GNU Multiple Precision Arithmetic Library_](https://gmplib.org), version 6.1.2.
