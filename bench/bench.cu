@@ -98,7 +98,7 @@ int main(int argc, char *argv[]) {
     puts("");
     bench_func<mul_wide>("mul_wide", m);
     puts("");
-    bench_func<my_modexp>("modexp", m / 10);
+    bench_func<my_modexp>("modexp", m / 100);
 
     return 0;
 }
