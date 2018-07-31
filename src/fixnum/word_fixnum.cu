@@ -150,12 +150,34 @@ public:
         internal::mad_hi_cc(hi, cy, a, b, c);
     }
 
+    // Returns the reciprocal for d.
+    __device__ __forceinline__
+    static fixnum
+    quorem(fixnum &q, fixnum &r, fixnum n, fixnum d) {
+        return quorem_wide(q, r, zero(), n, d);
+    }
+
+    // Accepts a reciprocal for d.
     __device__ __forceinline__
     static void
-    quorem(fixnum &q, fixnum &r, fixnum n, fixnum d) {
-        // FIXME: Replace with fancy quorem.
-        q = n / d;
-        r = n % d;
+    quorem(fixnum &q, fixnum &r, fixnum n, fixnum d, fixnum v) {
+        quorem_wide(q, r, zero(), n, d, v);
+    }
+
+    // Returns the reciprocal for d.
+    // NB: returns q = r = fixnum::MAX if n_hi > d.
+    __device__ __forceinline__
+    static fixnum
+    quorem_wide(fixnum &q, fixnum &r, fixnum n_hi, fixnum n_lo, fixnum d) {
+        return internal::quorem_wide(q, r, n_hi, n_lo, d);
+    }
+
+    // Accepts a reciprocal for d.
+    // NB: returns q = r = fixnum::MAX if n_hi > d.
+    __device__ __forceinline__
+    static void
+    quorem_wide(fixnum &q, fixnum &r, fixnum n_hi, fixnum n_lo, fixnum d, fixnum v) {
+        internal::quorem_wide(q, r, n_hi, n_lo, d, v);
     }
 
     __device__ __forceinline__

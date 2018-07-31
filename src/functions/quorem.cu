@@ -209,7 +209,7 @@ quorem<fixnum>::operator()(
 
     fixnum::set(q, qj, m);
 
-    digit dinv = uquorem_reciprocal(div_msw);
+    digit dinv = internal::quorem_reciprocal(div_msw);
     for (int j = m - 1; j >= 0; --j) {
         digit a_hi, a_lo, hi, dummy;
 
@@ -224,7 +224,7 @@ quorem<fixnum>::operator()(
         // TODO: uquorem_wide has a bad branch at the start which will
         // cause trouble when div_msw < a_hi is not universally true
         // across the warp. Need to investigate ways to alleviate that.
-        uquorem_wide(qj, dummy, a_hi, a_lo, div_msw, dinv);
+        digit::quorem_wide(qj, dummy, a_hi, a_lo, div_msw, dinv);
 
         dj = layout::shfl_up0(div, j);
         hi = fixnum::mul_digit(tmp, qj, dj);
