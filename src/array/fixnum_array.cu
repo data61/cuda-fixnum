@@ -246,14 +246,18 @@ dispatch(int nelts, Args... args) {
     int idx = (blk_tid_offset + tid_in_blk) / fixnum::SLOT_WIDTH;
 
     if (idx < nelts) {
+        // TODO: Find a way to load each argument into a register before passing
+        // it to fn, and then unpack the return values where they belong. This
+        // will guarantee that all operations happen on registers, rather than
+        // inadvertently operating on memory.
+
         Func<fixnum> fn;
-        // FIXME: This offset calculation is entwined with fixnum layout and so
+        // TODO: This offset calculation is entwined with fixnum layout and so
         // belongs somewhere else.
         int off = idx * fixnum::layout::WIDTH + fixnum::layout::laneIdx();
-        // FIXME: This is hiding a mortal sin against memory
-        // aliasing/management/type-safety.
+        // TODO: This is hiding a sin against memory aliasing / management /
+        // type-safety.
         fn(args[off]...);
-        //fn(fixnum::load(as_byte_ptr(args), idx)...);
     }
 }
 
