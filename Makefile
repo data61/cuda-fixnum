@@ -3,7 +3,7 @@ NVCC_FLAGS = -ccbin clang-3.8 -Wno-deprecated-declarations -std=c++11 -Xcompiler
 NVCC_OPT_FLAGS = -DNDEBUG
 NVCC_TEST_FLAGS = -lineinfo
 NVCC_DBG_FLAGS = -g -G
-NVCC_LIBS = -lstdc++
+NVCC_LIBS = -lstdc++ -lgtest
 GENCODES = 50
 
 % : %.cu
