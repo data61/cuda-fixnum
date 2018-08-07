@@ -1,13 +1,13 @@
 #pragma once
 
+#include "functions/internal/modexp_impl.cu"
 #include "functions/monty_mul.cu"
 
-template< typename fixnum, int WINDOW_SIZE = 5 >
+template<
+    typename fixnum,
+    int WINDOW_SIZE = internal::bytes_to_window_size(fixnum::BYTES) >
 class multi_modexp {
-    static_assert(WINDOW_SIZE >= 1 && WINDOW_SIZE <= 7,
-                  "Invalid or unreasonable window size specified.");
-    static constexpr int WIDTH = fixnum::SLOT_WIDTH;
-    typedef typename fixnum::digit digit;
+    static_assert(WINDOW_SIZE >= 1, "Invalid window size.");
 
     // TODO: Generalise multi_modexp so that it can work with any modular
     // multiplication algorithm.
@@ -21,66 +21,46 @@ public:
 };
 
 
-// TODO: Finish this properly and use it to set the window length.
-#if 0
-static void
-k_ary_window_params(
-    int &win_quo, int &win_rem, int &win_size,
-    int exp_bits, int word_bits)
-{
-    // Iterate through window sizes while nmults is decreasing; works because
-    // 2^k + b(1 + 1/k) is convex.
-    // TODO: These values should be determined by experiment on the hardware.
-    // In particular, the choice below simply minimises the number of
-    // multiplications; in many circumstances the trade-off with register
-    // pressure would suggest using a smaller window size (basically because the
-    // convex function above is quite flat around its minimum).
-
-    // nmults <- 2(b + 1) = ceil(2^k + b(1 + 1/k)) at k = 1
-    for (int k = 2, nmults = 2 * (exp_bits + 1); k < word_bits; ++k) {
-        // nmults = ceil(2^k + b(1 + 1/k))
-        int nmults_next = iceil(k * (1 << k) + exp_bits * (k + 1), k);
-        // check for upturn
-        if (nmults_next > nmults)
-            break;
-        nmults = nmults_next;
-    }
-    // k can't be bigger than a word.
-    assert(k < word_bits);
-
-    win_size = k;
-    win_quo = word_bits / k;
-    win_rem = word_bits % k;
-}
-#endif
-
 /*
  * Left-to-right k-ary exponentiation (see [HAC, Algorithm 14.82]).
  *
- * Note: I don't immediately see how to use the "modified" variant
- * [HAC, Algo 14.83] since there the number of squarings depends on
- * the 2-adic valuation of the window value.
+ * If it is known that the exponents given to this function will be small, then
+ * a better window size can be chosen. The window size should be the left value
+ * in the pair below whose right value is the largest less than the exponent.
+ * For example, exponents of 192 bits should take the window 4 corresponding to
+ * 122.
+ *
+ * [[1, 1], [2, 7], [3, 35], [4, 122], [5, 369], [6, 1044],
+ *  [7, 2823], [8, 7371], [9, 18726], [10, 46490]]
+ *
+ * See the documentation in "functions/internal/modexp_impl.cu" for more
+ * information.
+ *
+ * TODO: The basic algorithm is applied to each word of the exponent in turn, so
+ * the last window used on each exponent word will be smaller than WINDOW_SIZE.
+ * Need a better way to scan the exponent so that the same WINDOW_SIZE is used
+ * throughout.
+ *
+ * TODO: Should only start the algorithm at the msb of e; it will result in many
+ * idle threads, but the current setup means they do pointless work; at least if
+ * they're idle they might make space for other work to be done. Document the
+ * fact that inputs should be ordered such that groups with similar exponents
+ * are together.
+ *
+ * NB: I don't immediately see how to use the "modified" variant [HAC, Algo
+ * 14.83] since there the number of squarings depends on the 2-adic valuation of
+ * the window value.
  */
 template< typename fixnum, int WINDOW_SIZE >
 __device__ void
 multi_modexp<fixnum, WINDOW_SIZE>::operator()(fixnum &z, fixnum x, fixnum e) const
 {
-    // TODO: WINDOW_MAX should be determined by the length of e, or --
-    // better -- by experiment.  The number of multiplications for
-    // window size k is 2^k + 1024 * (1 + 1/k):
-    //
-    // ? [[k, ceil(2^k + 1024 * (1 + 1/k))] | k <- [1 .. 8]]
-    // % = [[1, 2050], [2, 1540], [3, 1374], [4, 1296], [5, 1261], [6, 1259], [7, 1299], [8, 1408]]
-    //
-    // So the minimum for 1024-bit numbers occurs with a window size
-    // of 6 bits, though 5 bits is extremely close and would save 32
-    // registers per thread.
-    //
-    // TODO: This enum should be integrated with the similar code in
-    // monty_modexp above.
-    static constexpr int WINDOW_MAIN_BITS = WINDOW_SIZE;
+    typedef typename fixnum::digit digit;
+    static constexpr int WIDTH = fixnum::SLOT_WIDTH;
+
+    // Window decomposition: digit::BITS = q * WINDOW_SIZE + r.
     static constexpr int WINDOW_REM_BITS = digit::BITS % WINDOW_SIZE;
-    static constexpr int WINDOW_MAX = (1U << WINDOW_MAIN_BITS);
+    static constexpr int WINDOW_MAX = (1U << WINDOW_SIZE);
 
     /* G[t] = z^t, t >= 0 */
     fixnum G[WINDOW_MAX];
@@ -97,20 +77,18 @@ multi_modexp<fixnum, WINDOW_SIZE>::operator()(fixnum &z, fixnum x, fixnum e) con
 
         // TODO: The squarings are noops on the first iteration (i =
         // w-1) and should be removed.
-        //
-        // Window decomposition: WORD_BITS = q * 5 + r
         digit win; // TODO: Morally this should be an int
-        for (int j = digit::BITS - WINDOW_MAIN_BITS; j >= 0; j -= WINDOW_MAIN_BITS) {
+        for (int j = digit::BITS - WINDOW_SIZE; j >= 0; j -= WINDOW_SIZE) {
             // TODO: For some bizarre reason, it is significantly
             // faster to do this loop than it is to unroll the 5
             // statements manually.  Idem for the remainder below.
             // Investigate how this is even possible!
-            for (int k = 0; k < WINDOW_MAIN_BITS; ++k)
+            for (int k = 0; k < WINDOW_SIZE; ++k)
                 monty(z, z);
             digit fj;
             // win = (f >> j) & WINDOW_MAIN_MASK;
             digit::rshift(fj, f, j);
-            digit::rem_2exp(win, fj, WINDOW_MAIN_BITS);
+            digit::rem_2exp(win, fj, WINDOW_SIZE);
             monty(z, z, G[win]);
         }
 
