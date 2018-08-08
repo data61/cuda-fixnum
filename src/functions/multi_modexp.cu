@@ -7,7 +7,8 @@ template<
     typename fixnum,
     int WINDOW_SIZE = internal::bytes_to_window_size(fixnum::BYTES) >
 class multi_modexp {
-    static_assert(WINDOW_SIZE >= 1, "Invalid window size.");
+    static_assert(WINDOW_SIZE >= 1 && WINDOW_SIZE < fixnum::digit::BITS,
+        "Invalid window size.");
 
     // TODO: Generalise multi_modexp so that it can work with any modular
     // multiplication algorithm.
