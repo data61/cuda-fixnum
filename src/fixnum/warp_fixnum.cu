@@ -370,7 +370,7 @@ public:
      * Return the index of the most significant bit of x, or -1 if x is
      * zero.
      *
-     * TODO: Give this function a better name; maybe ceil_log2()?
+     * TODO: Give this function a better name; maybe floor_log2()?
      */
     __device__ static int msb(fixnum x) {
         int b = most_sig_dig(x);
@@ -386,7 +386,7 @@ public:
      * Return the 2-valuation of x, i.e. the integer k >= 0 such that
      * 2^k divides x but 2^(k+1) does not divide x.  Depending on the
      * representation, can think of this as CTZ(x) ("Count Trailing
-     * Zeros").
+     * Zeros").  The 2-valuation of zero is *ahem* fixnum::BITS.
      *
      * TODO: Refactor common code between here, msb() and
      * most_sig_dig(). Perhaps write msb in terms of two_valuation?
@@ -395,17 +395,13 @@ public:
      * warpSize, the answer is wrong.
      */
     __device__ static int two_valuation(fixnum x) {
-        // FIXME: Should be able to get this value from limits or numeric_limits
-        // or whatever.
-        enum { UINT32_BITS = 8 * sizeof(uint32_t) };
-        static_assert(UINT32_BITS == 32, "uint32_t isn't 32 bits");
-
         uint32_t a = nonzero_mask(x);
         int b = internal::ctz(a), c = 0;
-        if (b < UINT32_BITS) {
+        if (b < SLOT_WIDTH) {
             digit y = layout::shfl(x, b);
             c = digit::ctz(y);
-        }
+        } else
+            b = SLOT_WIDTH;
         return c + b * digit::BITS;
     }
 
@@ -417,6 +413,9 @@ public:
      *
      * TODO: Think of better names for these functions. Something like
      * mul_2exp.
+     *
+     * TODO: Could improve performance significantly by using the funnel shift
+     * instruction: https://docs.nvidia.com/cuda/parallel-thread-execution/#logic-and-shift-instructions-shf
      */
     __device__
     static void
@@ -444,6 +443,16 @@ public:
     }
 
     /*
+     * TODO: Adapt lshift above to not bother calculating overflow.
+     */
+    __device__
+    static void
+    lshift(fixnum &y, fixnum x, int b) {
+        fixnum overflow;
+        lshift(y, overflow, x, b);
+    }
+
+    /*
      * Set y to be x shifted by b bits to the right; effectively
      * divide by 2^b. Return the bottom b bits of x.
      *
@@ -454,6 +463,13 @@ public:
     static void
     rshift(fixnum &y, fixnum &underflow, fixnum x, int b) {
         lshift(underflow, y, x, BITS - b);
+    }
+
+    __device__
+    static void
+    rshift(fixnum &y, fixnum x, int b) {
+        fixnum underflow;
+        rshift(underflow, y, x, BITS - b);
     }
 
 private:
