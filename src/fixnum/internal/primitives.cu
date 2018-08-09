@@ -614,4 +614,14 @@ namespace internal {
         assert(r & (((uint_tp)1 << lz) - 1) == 0);
         r >>= lz;
     }
+
+    /*
+     * ceiling(n / d)
+     */
+    template< typename T >
+    __device__ __forceinline__
+    void
+    ceilquo(T &q, T n, T d) {
+        q = (n + d - 1) / d;
+    }
 }
