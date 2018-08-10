@@ -106,7 +106,7 @@ modexp<fixnum>::modexp(fixnum mod, fixnum exp)
     int hi_idx;
 
     hi_idx = fixnum::msb(exp);
-    // TODO: select window size properly
+    // FIXME: select window size properly
     window_size = 5;
 
     // Allocate exp_wins once per threadblock.
