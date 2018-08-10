@@ -156,7 +156,10 @@ modexp<fixnum>::operator()(fixnum &z, fixnum x) const
     // We need to know that exp_wins_len > 0 when z is initialised just before
     // the main loop.
     if (exp_wins_len == 0) {
-        z = fixnum::one();
+        //z = fixnum::one();
+        // TODO: This complicated way of producing a 1 is to
+        // accommodate the possibility that monty.is_valid is false.
+        monty.from_monty(z, monty.one());
         return;
     }
 
