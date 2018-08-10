@@ -109,19 +109,16 @@ modexp<fixnum>::modexp(fixnum mod, fixnum exp)
     // FIXME: select window size properly
     window_size = 5;
 
-    // Allocate exp_wins once per threadblock.
-    __shared__ uint32_t *data;
-    if (threadIdx.x == 0) {
+    uint32_t *data;
+    int L = fixnum::layout::laneIdx();
+    if (L == 0) {
         int max_windows;
         internal::ceilquo(max_windows, fixnum::BITS, window_size);
         data = (uint32_t *) malloc(max_windows * sizeof(uint32_t));
         // FIXME: Handle this error properly.
         assert(data != nullptr);
     }
-    // Synchronise threads before using data.
-    __syncthreads();
-
-    exp_wins = data;
+    exp_wins = (uint32_t *) __shfl_sync(0xFFFFFFFF, (uintptr_t)data, 0, fixnum::layout::WIDTH);
     uint32_t *ptr = exp_wins;
     while (hi_idx >= 0)
         *ptr++ = scan_window(hi_idx, exp, window_size);
@@ -133,9 +130,7 @@ template< typename fixnum >
 __device__
 modexp<fixnum>::~modexp()
 {
-    // Synchronise threads before freeing data.
-    __syncthreads();
-    if (threadIdx.x == 0)
+    if (fixnum::layout::laneIdx() == 0)
         free(exp_wins);
 }
 
