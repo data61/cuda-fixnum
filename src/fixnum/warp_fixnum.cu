@@ -469,7 +469,7 @@ public:
     static void
     rshift(fixnum &y, fixnum x, int b) {
         fixnum underflow;
-        rshift(underflow, y, x, BITS - b);
+        rshift(y, underflow, x, b);
     }
 
 private:
