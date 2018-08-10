@@ -29,8 +29,8 @@ class modexp {
     // algorithm.  Allocated & deallocated once per thread block. Ref:
     // https://docs.nvidia.com/cuda/cuda-c-programming-guide/#per-thread-block-allocation
     // TODO: Consider storing the whole exp_wins array in shared memory.
-    int exp_wins_len;
     uint32_t *exp_wins;
+    int exp_wins_len;
     int window_size;
 
     // TODO: Generalise modexp so that it can work with any modular
@@ -39,13 +39,13 @@ class modexp {
 
     // Helper functions for decomposing the exponent into windows.
     __device__ uint32_t
-    scan_window(int &hi_idx, digit &current_digit, fixnum &n, int max_window_bits);
+    scan_window(int &hi_idx, fixnum &n, int max_window_bits);
 
     __device__ int
-    scan_zero_window(int &hi_idx, digit &current_digit, fixnum &n);
+    scan_zero_window(int &hi_idx, fixnum &n);
 
     __device__ uint32_t
-    scan_nonzero_window(int &hi_idx, digit &current_digit, fixnum &n, int max_window_bits);
+    scan_nonzero_window(int &hi_idx, fixnum &n, int max_window_bits);
 
 public:
     /*
@@ -62,16 +62,13 @@ public:
 
 template< typename fixnum >
 __device__ uint32_t
-modexp<fixnum>::scan_nonzero_window(
-        int &hi_idx, digit &current_digit,
-        fixnum &n, int max_window_bits) {
+modexp<fixnum>::scan_nonzero_window(int &hi_idx, fixnum &n, int max_window_bits) {
     uint32_t bits_remaining = hi_idx + 1, win_bits;
-    digit w;
+    digit w, lsd = fixnum::bottom_digit(n);
 
     internal::min(win_bits, bits_remaining, max_window_bits);
-    digit::rem_2exp(w, current_digit, win_bits);
+    digit::rem_2exp(w, lsd, win_bits);
     fixnum::rshift(n, n, win_bits);
-    current_digit = fixnum::bottom_digit(n);
     hi_idx -= win_bits;
 
     return w;
@@ -80,10 +77,9 @@ modexp<fixnum>::scan_nonzero_window(
 
 template< typename fixnum >
 __device__ int
-modexp<fixnum>::scan_zero_window(int &hi_idx, digit &current_digit, fixnum &n) {
+modexp<fixnum>::scan_zero_window(int &hi_idx, fixnum &n) {
     int nzeros = fixnum::two_valuation(n);
     fixnum::rshift(n, n, nzeros);
-    current_digit = fixnum::bottom_digit(n);
     hi_idx -= nzeros;
     return nzeros;
 }
@@ -91,16 +87,15 @@ modexp<fixnum>::scan_zero_window(int &hi_idx, digit &current_digit, fixnum &n) {
 
 template< typename fixnum >
 __device__ uint32_t
-modexp<fixnum>::scan_window(int &hi_idx, digit &current_digit, fixnum &n, int max_window_bits) {
+modexp<fixnum>::scan_window(int &hi_idx, fixnum &n, int max_window_bits) {
     int nzeros;
     uint32_t window;
-    nzeros = scan_zero_window(hi_idx, current_digit, n);
-    window = scan_nonzero_window(hi_idx, current_digit, n, max_window_bits);
+    nzeros = scan_zero_window(hi_idx, n);
+    window = scan_nonzero_window(hi_idx, n, max_window_bits);
     // top half is the odd window, bottom half is nzeros
     // TODO: fix magic number
     return (window << 16) | nzeros;
 }
-
 
 template< typename fixnum >
 __device__
@@ -109,26 +104,27 @@ modexp<fixnum>::modexp(fixnum mod, fixnum exp)
 {
     // sliding window decomposition
     int hi_idx;
-    digit current_digit;
 
     hi_idx = fixnum::msb(exp);
     // TODO: select window size properly
     window_size = 5;
-    current_digit = fixnum::bottom_digit(exp);
 
     // Allocate exp_wins once per threadblock.
     __shared__ uint32_t *data;
     if (threadIdx.x == 0) {
         int max_windows;
         internal::ceilquo(max_windows, fixnum::BITS, window_size);
-        data = (uint32_t *) malloc(max_windows);
+        data = (uint32_t *) malloc(max_windows * sizeof(uint32_t));
         // FIXME: Handle this error properly.
         assert(data != nullptr);
     }
+    // Synchronise threads before using data.
+    __syncthreads();
+
     exp_wins = data;
     uint32_t *ptr = exp_wins;
     while (hi_idx >= 0)
-        *ptr++ = scan_window(hi_idx, current_digit, exp, window_size);
+        *ptr++ = scan_window(hi_idx, exp, window_size);
     exp_wins_len = ptr - exp_wins;
 }
 
@@ -137,6 +133,8 @@ template< typename fixnum >
 __device__
 modexp<fixnum>::~modexp()
 {
+    // Synchronise threads before freeing data.
+    __syncthreads();
     if (threadIdx.x == 0)
         free(exp_wins);
 }
@@ -152,6 +150,7 @@ modexp<fixnum>::operator()(fixnum &z, fixnum x) const
     // rarely need to be more than 7. Consider storing G in shared memory to
     // remove the need for WINDOW_MAX_BITS altogether.
     static constexpr int WINDOW_MAX_BITS_REDUCED = 7;
+    static constexpr int WINDOW_MAX_VAL_REDUCED = 1U << WINDOW_MAX_BITS_REDUCED;
     assert(window_size <= WINDOW_MAX_BITS_REDUCED);
 
     // We need to know that exp_wins_len > 0 when z is initialised just before
@@ -163,13 +162,14 @@ modexp<fixnum>::operator()(fixnum &z, fixnum x) const
 
     // TODO: handle case of small exponent specially
 
+    int window_max = 1U << window_size;
     /* G[t] = z^(2t + 1) t >= 0 (odd powers of z) */
-    fixnum G[WINDOW_MAX_BITS_REDUCED / 2];
+    fixnum G[WINDOW_MAX_VAL_REDUCED / 2];
     monty.to_monty(z, x);
     G[0] = z;
     if (window_size > 1) {
         monty(z, z);
-        for (int t = 1; t < window_size / 2; ++t) {
+        for (int t = 1; t < window_max / 2; ++t) {
             G[t] = G[t - 1];
             monty(G[t], G[t], z);
         }
@@ -186,7 +186,7 @@ modexp<fixnum>::operator()(fixnum &z, fixnum x) const
     while (two_val-- > 0)
         monty(z, z);
 
-    while (windows != exp_wins) {
+    while (windows >= exp_wins) {
         two_val = window_size;
         while (two_val-- > 0)
             monty(z, z);
