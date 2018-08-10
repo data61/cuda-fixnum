@@ -90,21 +90,21 @@ public:
     /*
      * Return digit at index idx.
      */
-    __device__ static fixnum get(fixnum var, int idx) {
+    __device__ static digit get(fixnum var, int idx) {
         return layout::shfl(var, idx);
     }
 
     /*
      * Set var digit at index idx to be x.
      */
-    __device__ static void set(fixnum &var, fixnum x, int idx) {
-        var = (layout::laneIdx() == idx) ? x : var;
+    __device__ static void set(fixnum &var, digit x, int idx) {
+        var = (layout::laneIdx() == idx) ? (fixnum)x : var;
     }
 
     /*
      * Return digit in most significant place. Might be zero.
      */
-    __device__ static fixnum top_digit(fixnum var) {
+    __device__ static digit top_digit(fixnum var) {
         return layout::shfl(var, layout::toplaneIdx);
     }
 
@@ -114,7 +114,7 @@ public:
      * TODO: Not clear how to interpret this function with more exotic fixnum
      * implementations such as RNS.
      */
-    __device__ static fixnum bottom_digit(fixnum var) {
+    __device__ static digit bottom_digit(fixnum var) {
         return layout::shfl(var, 0);
     }
 
