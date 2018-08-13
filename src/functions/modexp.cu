@@ -93,9 +93,13 @@ modexp<fixnum>::modexp(fixnum mod, fixnum exp)
 
     uint32_t *data;
     int L = fixnum::layout::laneIdx();
+    // TODO: This does one malloc per slot; the sliding window exponentiation
+    // only really makes sense with fixed exponent, so we should be able to arrange
+    // things so we only need one malloc per warp or even one malloc per thread block.
     if (L == 0) {
         int max_windows;
         internal::ceilquo(max_windows, fixnum::BITS, window_size);
+        // NB: Default heap on the device is 8MB.
         data = (uint32_t *) malloc(max_windows * sizeof(uint32_t));
         // FIXME: Handle this error properly.
         assert(data != nullptr);
