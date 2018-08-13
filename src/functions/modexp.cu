@@ -104,6 +104,7 @@ modexp<fixnum>::modexp(fixnum mod, fixnum exp)
         // FIXME: Handle this error properly.
         assert(data != nullptr);
     }
+    // Broadcast data to each thread in the slot.
     exp_wins = (uint32_t *) __shfl_sync(0xFFFFFFFF, (uintptr_t)data, 0, fixnum::layout::WIDTH);
     uint32_t *ptr = exp_wins;
     while (hi_idx >= 0)
