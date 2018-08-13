@@ -1,31 +1,13 @@
 #pragma once
 
+#include "functions/internal/modexp_impl.cu"
 #include "functions/monty_mul.cu"
 
 template< typename fixnum >
 class modexp {
     typedef typename fixnum::digit digit;
 
-    // TODO: Update the comment below
-    // TODO: These should be determined by the exponent. Current choices
-    // are optimal for 1024 bit exponents.
-    //
-    // For various exponent bit lengths, this GP code prints the best choice of
-    // window size k for reducing multiplications, however it doesn't consider the
-    // possibility of register usage (e.g. for 1024 bit exponents, 5 is a better
-    // choice than the optimal 6, since 6 saves only two multiplications at a
-    // cost of 32 registers).
-    //
-    // forstep(b=256,8200,256,
-    //   my (W = [[k, ceil(2^k + b * (1 + 1/k))] | k <- [1 .. 16]],
-    //       m = vecsort(W, 2)[1]);
-    //   print(b, ": ", m))
-    //
-    // NB: The best window size exceeds MAX_WINDOW_BITS=8 when b ~ 18700 bits.
-    // FIXME: The formula above differs slightly from MCA, Section 2.6.2. Work out
-    // which is correct.
-
-    // Decomposition of the exponent for use in the varying-width sliding-window
+    // Decomposition of the exponent for use in the constant-width sliding-window
     // algorithm.  Allocated & deallocated once per thread block. Ref:
     // https://docs.nvidia.com/cuda/cuda-c-programming-guide/#per-thread-block-allocation
     // TODO: Consider storing the whole exp_wins array in shared memory.
@@ -97,6 +79,7 @@ modexp<fixnum>::scan_window(int &hi_idx, fixnum &n, int max_window_bits) {
     return (window << 16) | nzeros;
 }
 
+
 template< typename fixnum >
 __device__
 modexp<fixnum>::modexp(fixnum mod, fixnum exp)
@@ -106,8 +89,7 @@ modexp<fixnum>::modexp(fixnum mod, fixnum exp)
     int hi_idx;
 
     hi_idx = fixnum::msb(exp);
-    // FIXME: select window size properly
-    window_size = 5;
+    window_size = internal::bits_to_clnw_window_size(hi_idx + 1);
 
     uint32_t *data;
     int L = fixnum::layout::laneIdx();

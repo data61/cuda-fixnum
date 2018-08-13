@@ -5,7 +5,7 @@
 
 template<
     typename fixnum,
-    int WINDOW_SIZE = internal::bytes_to_window_size(fixnum::BYTES) >
+    int WINDOW_SIZE = internal::bytes_to_k_ary_window_size(fixnum::BYTES) >
 class multi_modexp {
     static_assert(WINDOW_SIZE >= 1 && WINDOW_SIZE < fixnum::digit::BITS,
         "Invalid window size.");

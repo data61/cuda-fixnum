@@ -327,7 +327,6 @@ TYPED_TEST(TypedPrimitives, mul_wide) {
     delete xs;
 }
 
-
 template< typename fixnum >
 struct my_modexp {
     __device__ void operator()(fixnum &z, fixnum x, fixnum e, fixnum m) {
@@ -358,6 +357,47 @@ TYPED_TEST(TypedPrimitives, modexp) {
         fixnum_array *tmp = input->rotate(i);
         fixnum_array *ys = tmp->repeat(vec_len);
         fixnum_array::template map<my_modexp>(res, xs, ys, zs);
+        check_result(tcase, vec_len, {res}, 1, vec_len);
+        delete ys;
+        delete tmp;
+    }
+    delete res;
+    delete input;
+    delete xs;
+    delete zs;
+}
+
+
+template< typename fixnum >
+struct my_multi_modexp {
+    __device__ void operator()(fixnum &z, fixnum x, fixnum e, fixnum m) {
+        multi_modexp<fixnum> mme(m);
+        fixnum zz;
+        mme(zz, x, e);
+        z = zz;
+    };
+};
+
+TYPED_TEST(TypedPrimitives, multi_modexp) {
+    typedef typename TestFixture::fixnum fixnum;
+    typedef fixnum_array<fixnum> fixnum_array;
+
+    fixnum_array *res, *input, *xs, *zs;
+    vector<byte_array> tcases;
+
+    read_tcases(tcases, input, "tests/modexp", 3);
+    int vec_len = input->length();
+    int vec_len_sqr = vec_len * vec_len;
+
+    res = fixnum_array::create(vec_len_sqr);
+    xs = input->repeat(vec_len);
+    zs = input->rotations(vec_len);
+
+    auto tcase = tcases.begin();
+    for (int i = 0; i < vec_len; ++i) {
+        fixnum_array *tmp = input->rotate(i);
+        fixnum_array *ys = tmp->repeat(vec_len);
+        fixnum_array::template map<my_multi_modexp>(res, xs, ys, zs);
         check_result(tcase, vec_len, {res}, 1, vec_len);
         delete ys;
         delete tmp;

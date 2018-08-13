@@ -37,7 +37,7 @@ namespace internal
      */
     // NB: For some reason we're not allowed to put this table in the definition
     // of bytes_to_window_size().
-    constexpr int BYTES_TO_WINDOW_SIZE_TABLE[] = {
+    constexpr int BYTES_TO_K_ARY_WINDOW_SIZE_TABLE[] = {
        -1,
        -1, //bytes bits
         2, // 2^2    32
@@ -56,7 +56,50 @@ namespace internal
 
     __device__
     constexpr int
-    bytes_to_window_size(unsigned bytes) {
-        return BYTES_TO_WINDOW_SIZE_TABLE[floorlog2(bytes)];
+    bytes_to_k_ary_window_size(unsigned bytes) {
+        return BYTES_TO_K_ARY_WINDOW_SIZE_TABLE[floorlog2(bytes)];
+    }
+
+
+    /*
+     * This Table 2 from Koç, C. K., 1995, "Analysis of Sliding Window
+     * Techniques for Exponentiation".
+     *
+     * The resolution of this table is higher than the one above because it's
+     * used in the fixed exponent modexp code and can benefit from using the
+     * precise bit length of the exponent, whereas the table above has to
+     * accommodate multiple different exponents simultaneously.
+     */
+    __constant__
+    int BYTES_TO_CLNW_WINDOW_SIZE_TABLE[] = {
+       -1, // bits
+        4, //  128
+        5, //  256
+        5, //  384
+        5, //  512
+        6, //  640
+        6, //  768
+        6, //  896
+        6, // 1024
+        6, // 1152
+        6, // 1280
+        6, // 1408
+        6, // 1536
+        6, // 1664
+        7, // 1792
+        7, // 1920
+        7, // 2048
+    };
+
+    __device__
+    constexpr int
+    bits_to_clnw_window_size(unsigned bits) {
+        // The chained ternary condition is forced upon us by the Draconian
+        // constraints of C++11 constexpr functions.
+        return
+            bits < 64 ? 2 :
+            bits < 128 ? 3 :
+            bits > 2048 ? 7 :
+            BYTES_TO_CLNW_WINDOW_SIZE_TABLE[(bits / 8) / 16];
     }
 }
