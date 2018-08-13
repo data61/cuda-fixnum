@@ -609,9 +609,19 @@ namespace internal {
                       "template type must be unsigned");
         int lz = quorem_normalise_divisor(d);
         uint_tp overflow = quorem_normalise_dividend(u_hi, u_lo, lz);
-        if (overflow) { q = r = (uint_tp)-1; }
+        if (overflow) { q = r = -(uint_tp)1; }
         quorem_wide_normalised(q, r, u_hi, u_lo, d, v);
         assert(r & (((uint_tp)1 << lz) - 1) == 0);
         r >>= lz;
+    }
+
+    /*
+     * ceiling(n / d)
+     */
+    template< typename T >
+    __device__ __forceinline__
+    void
+    ceilquo(T &q, T n, T d) {
+        q = (n + d - 1) / d;
     }
 }
