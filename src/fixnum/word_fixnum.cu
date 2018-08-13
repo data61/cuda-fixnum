@@ -308,18 +308,6 @@ public:
             ? x
             : (fixnum)((digit)1 << (BITS - clz(x)));
     }
-
-
-    /*
-     * ceiling(n / d)
-     *
-     * FIXME: This doesn't belong here.
-     */
-    __device__ __forceinline__
-    static void
-    ceilquo(fixnum &q, fixnum n, fixnum d) {
-        q = (n + d - 1) / d;
-    }
 };
 
 typedef word_fixnum<std::uint32_t> u32_fixnum;
