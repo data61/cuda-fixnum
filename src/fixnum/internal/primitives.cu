@@ -55,14 +55,6 @@ namespace internal {
              : "l"(a), "l" (b));
     }
 
-    template< typename T >
-    __device__ __forceinline__
-    void
-    add_cy(T &s, T &cy, T a, T b) {
-        add_cc(s, a, b);
-        addc(cy, cy, 0);
-    }
-
     /*
      * hi * 2^n + lo = a * b
      */
@@ -156,19 +148,33 @@ namespace internal {
     // as above but with carry in cy
     __device__ __forceinline__
     void
-    mad_lo_cc(u32 &lo, u32 &cy, u32 a, u32 b, u32 c) {
-        asm ("mad.lo.cc.u32 %0, %2, %3, %4;\n\t"
-             "addc.u32 %1, %1, 0;"
-             : "=r"(lo), "+r"(cy)
+    mad_lo_cc(u32 &lo, u32 a, u32 b, u32 c) {
+        asm ("mad.lo.cc.u32 %0, %1, %2, %3;"
+             : "=r"(lo)
              : "r"(a), "r" (b), "r"(c));
     }
 
     __device__ __forceinline__
     void
-    mad_lo_cc(u64 &lo, u64 &cy, u64 a, u64 b, u64 c) {
-        asm ("mad.lo.cc.u64 %0, %2, %3, %4;\n\t"
-             "addc.u64 %1, %1, 0;"
-             : "=l"(lo), "+l"(cy)
+    mad_lo_cc(u64 &lo, u64 a, u64 b, u64 c) {
+        asm ("mad.lo.cc.u64 %0, %1, %2, %3;"
+             : "=l"(lo)
+             : "l"(a), "l" (b), "l"(c));
+    }
+
+    __device__ __forceinline__
+    void
+    madc_lo_cc(u32 &lo, u32 a, u32 b, u32 c) {
+        asm ("madc.lo.cc.u32 %0, %1, %2, %3;"
+             : "=r"(lo)
+             : "r"(a), "r" (b), "r"(c));
+    }
+
+    __device__ __forceinline__
+    void
+    madc_lo_cc(u64 &lo, u64 a, u64 b, u64 c) {
+        asm ("madc.lo.cc.u64 %0, %1, %2, %3;"
+             : "=l"(lo)
              : "l"(a), "l" (b), "l"(c));
     }
 
@@ -190,22 +196,52 @@ namespace internal {
 
     __device__ __forceinline__
     void
-    mad_hi_cc(u32 &hi, u32 &cy, u32 a, u32 b, u32 c) {
-        asm ("mad.hi.cc.u32 %0, %2, %3, %4;\n\t"
-             "addc.u32 %1, %1, 0;"
-             : "=r"(hi), "+r"(cy)
+    mad_hi_cc(u32 &hi, u32 a, u32 b, u32 c) {
+        asm ("mad.hi.cc.u32 %0, %1, %2, %3;"
+             : "=r"(hi)
              : "r"(a), "r" (b), "r"(c));
     }
 
+    __device__ __forceinline__
+    void
+    mad_hi_cc(u64 &hi, u64 a, u64 b, u64 c) {
+        asm ("mad.hi.cc.u64 %0, %1, %2, %3;"
+             : "=l"(hi)
+             : "l"(a), "l" (b), "l"(c));
+    }
 
     __device__ __forceinline__
     void
-    mad_hi_cc(u64 &hi, u64 &cy, u64 a, u64 b, u64 c) {
-        asm ("mad.hi.cc.u64 %0, %2, %3, %4;\n\t"
-             "addc.u64 %1, %1, 0;"
-             : "=l"(hi), "+l"(cy)
+    madc_hi_cc(u32 &hi, u32 a, u32 b, u32 c) {
+        asm ("madc.hi.cc.u32 %0, %1, %2, %3;"
+             : "=r"(hi)
+             : "r"(a), "r" (b), "r"(c));
+    }
+
+    __device__ __forceinline__
+    void
+    madc_hi_cc(u64 &hi, u64 a, u64 b, u64 c) {
+        asm ("madc.hi.cc.u64 %0, %1, %2, %3;\n\t"
+             : "=l"(hi)
              : "l"(a), "l" (b), "l"(c));
     }
+
+    template< typename T >
+    __device__ __forceinline__
+    void
+    mad_lo_cy(T &hi, T &cy, T a, T b, T c) {
+        mad_lo_cc(hi, a, b, c);
+        addc(cy, cy, 0);
+    }
+
+    template< typename T >
+    __device__ __forceinline__
+    void
+    mad_hi_cy(T &hi, T &cy, T a, T b, T c) {
+        mad_hi_cc(hi, a, b, c);
+        addc(cy, cy, 0);
+    }
+
 
     /*
      * Count Leading Zeroes in x.

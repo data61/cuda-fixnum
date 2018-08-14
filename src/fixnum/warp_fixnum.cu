@@ -242,12 +242,12 @@ public:
             digit aa = layout::shfl(a, i);
 
             // TODO: See if using umad.wide improves this.
-            digit::mad_hi_cc(r, cy, aa, b, r);
+            digit::mad_hi_cy(r, cy, aa, b, r);
             // TODO: Could use rotate here, which is slightly
             // cheaper than shfl_up0...
             r = layout::shfl_up0(r, 1);
             cy = layout::shfl_up0(cy, 1);
-            digit::mad_lo_cc(r, cy, aa, b, r);
+            digit::mad_lo_cy(r, cy, aa, b, r);
         }
         cy = layout::shfl_up0(cy, 1);
         add(r, r, cy);

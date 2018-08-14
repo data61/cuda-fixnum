@@ -64,6 +64,8 @@ public:
         s = a + b;
     }
 
+    // TODO: this function does not follow the convention of later '*_cy'
+    // functions of accumulating the carry into cy.
     __device__ __forceinline__
     static void
     add_cy(fixnum &s, digit &cy, fixnum a, fixnum b) {
@@ -133,8 +135,14 @@ public:
     // as above but increment cy by the mad carry
     __device__ __forceinline__
     static void
-    mad_lo_cc(fixnum &lo, fixnum &cy, fixnum a, fixnum b, fixnum c) {
-        internal::mad_lo_cc(lo, cy, a, b, c);
+    mad_lo_cy(fixnum &lo, fixnum &cy, fixnum a, fixnum b, fixnum c) {
+        internal::mad_lo_cy(lo, cy, a, b, c);
+    }
+
+    __device__ __forceinline__
+    static void
+    mad_hi(fixnum &hi, fixnum a, fixnum b, fixnum c) {
+        internal::mad_hi(hi, a, b, c);
     }
 
     __device__ __forceinline__
@@ -146,8 +154,8 @@ public:
     // as above but increment cy by the mad carry
     __device__ __forceinline__
     static void
-    mad_hi_cc(fixnum &hi, fixnum &cy, fixnum a, fixnum b, fixnum c) {
-        internal::mad_hi_cc(hi, cy, a, b, c);
+    mad_hi_cy(fixnum &hi, fixnum &cy, fixnum a, fixnum b, fixnum c) {
+        internal::mad_hi_cy(hi, cy, a, b, c);
     }
 
     // Returns the reciprocal for d.
