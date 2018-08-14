@@ -7,6 +7,62 @@ namespace internal {
     typedef std::uint32_t u32;
     typedef std::uint64_t u64;
 
+    __device__ __forceinline__
+    void
+    addc(u32 &s, u32 a, u32 b) {
+        asm ("addc.u32 %0, %1, %2;"
+             : "=r"(s)
+             : "r"(a), "r" (b));
+    }
+
+    __device__ __forceinline__
+    void
+    add_cc(u32 &s, u32 a, u32 b) {
+        asm ("add.cc.u32 %0, %1, %2;"
+             : "=r"(s)
+             : "r"(a), "r" (b));
+    }
+
+    __device__ __forceinline__
+    void
+    addc_cc(u32 &s, u32 a, u32 b) {
+        asm ("addc.cc.u32 %0, %1, %2;"
+             : "=r"(s)
+             : "r"(a), "r" (b));
+    }
+
+    __device__ __forceinline__
+    void
+    addc(u64 &s, u64 a, u64 b) {
+        asm ("addc.u64 %0, %1, %2;"
+             : "=l"(s)
+             : "l"(a), "l" (b));
+    }
+
+    __device__ __forceinline__
+    void
+    add_cc(u64 &s, u64 a, u64 b) {
+        asm ("add.cc.u64 %0, %1, %2;"
+             : "=l"(s)
+             : "l"(a), "l" (b));
+    }
+
+    __device__ __forceinline__
+    void
+    addc_cc(u64 &s, u64 a, u64 b) {
+        asm ("addc.cc.u64 %0, %1, %2;"
+             : "=l"(s)
+             : "l"(a), "l" (b));
+    }
+
+    template< typename T >
+    __device__ __forceinline__
+    void
+    add_cy(T &s, T &cy, T a, T b) {
+        add_cc(s, a, b);
+        addc(cy, cy, 0);
+    }
+
     /*
      * hi * 2^n + lo = a * b
      */
