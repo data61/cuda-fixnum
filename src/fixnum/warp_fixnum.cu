@@ -264,54 +264,35 @@ public:
      * r is the "lo half" (see mul_lo above) and s is the
      * corresponding "hi half".
      */
-    __device__ static void mul_wide(fixnum &s, fixnum &r, fixnum a, fixnum b) {
-        // TODO: See if we can get away with a smaller type for cy.
-        digit cy = digit::zero();
+    __device__ static void mul_wide(fixnum &ss, fixnum &rr, fixnum a, fixnum b) {
         int L = layout::laneIdx();
 
-        // TODO: Rewrite this using rotates instead of shuffles;
-        // should be simpler and faster.
+        fixnum r, s;
         r = fixnum::zero();
         s = fixnum::zero();
-        for (int i = layout::WIDTH - 1; i >= 0; --i) {
-            digit aa = layout::shfl(a, i);
-            fixnum t;
+        digit cy = digit::zero();
 
-            // TODO: Review this code: it seems to have more shuffles than
-            // necessary, and besides, why does it not use digit_addmuli?
-            digit::mad_hi_cc(r, cy, aa, b, r);
+        fixnum ai = layout::shfl(a, 0);
+        digit::mul_lo(s, ai, b);
+        r = L == 0 ? s : r;  // r[0] = s[0];
+        s = layout::shfl_down0(s, 1);
+        digit::mad_hi_cy(s, cy, ai, b, s);
 
-            t = layout::shfl(cy, layout::toplaneIdx);
-            // TODO: Is there a way to avoid this add?  Definitely need to
-            // propagate the carry at least one place, but maybe not more?
-            // Previous (wrong) version: "s = (L == 0) ? s + t : s;"
-            digit_to_fixnum(t);
-            add(s, s, t);
+        for (int i = 1; i < layout::WIDTH; ++i) {
+            fixnum ai = layout::shfl(a, i);
+            digit::mad_lo_cy(s, cy, ai, b, s);
 
-            // shuffle up hi words
-            s = layout::shfl_up(s, 1);
-            // most sig word of lo words becomes least sig of hi words
-            t = layout::shfl(r, layout::toplaneIdx);
-            s = (L == 0) ? t : s;
+            // TODO: Substituting the shfl call into the conditional didn't work
+            // for some reason; find out why.
+            fixnum s0 = layout::shfl(s, 0);
+            r = (L == i) ? s0 : r; // r[i] = s[0]
+            s = layout::shfl_down0(s, 1);
 
-            r = layout::shfl_up0(r, 1);
-            cy = layout::shfl_up0(cy, 1);
-            digit::mad_lo_cc(r, cy, aa, b, r);
+            digit::mad_hi_cy(s, cy, ai, b, s);
         }
-        // TODO: This carry propgation from r to s is a bit long-winded.
-        // Can we simplify?
-        // NB: cy_hi <= width.  TODO: Justify this explicitly.
-        digit cy_hi = layout::shfl(cy, layout::toplaneIdx);
-        cy = layout::shfl_up0(cy, 1);
-        add_cy(r, cy, r, cy);
-        digit::add(cy_hi, cy_hi, cy); // Can't overflow since cy_hi <= width.
-        assert(digit::cmp(cy_hi, cy) >= 0);
-        // TODO: Investigate: replacing the following two lines with
-        // simply "s = (L == 0) ? s + cy_hi : s;" produces no detectible
-        // errors. Can I prove that (MAX_UINT64 - s[0]) < width?
-        digit_to_fixnum(cy_hi);
-        add_cy(s, cy, s, cy_hi);
-        assert(digit::is_zero(cy));
+        add_cy(s, s, cy);
+        rr = r;
+        ss = s;
     }
 
     __device__ static void mul_hi(fixnum &s, fixnum a, fixnum b) {
