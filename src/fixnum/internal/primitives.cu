@@ -226,23 +226,6 @@ namespace internal {
              : "l"(a), "l" (b), "l"(c));
     }
 
-    template< typename T >
-    __device__ __forceinline__
-    void
-    mad_lo_cy(T &hi, T &cy, T a, T b, T c) {
-        mad_lo_cc(hi, a, b, c);
-        addc(cy, cy, 0);
-    }
-
-    template< typename T >
-    __device__ __forceinline__
-    void
-    mad_hi_cy(T &hi, T &cy, T a, T b, T c) {
-        mad_hi_cc(hi, a, b, c);
-        addc(cy, cy, 0);
-    }
-
-
     /*
      * Count Leading Zeroes in x.
      */

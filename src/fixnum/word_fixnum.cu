@@ -136,13 +136,8 @@ public:
     __device__ __forceinline__
     static void
     mad_lo_cy(fixnum &lo, fixnum &cy, fixnum a, fixnum b, fixnum c) {
-        internal::mad_lo_cy(lo, cy, a, b, c);
-    }
-
-    __device__ __forceinline__
-    static void
-    mad_hi(fixnum &hi, fixnum a, fixnum b, fixnum c) {
-        internal::mad_hi(hi, a, b, c);
+        internal::mad_lo_cc(lo, a, b, c);
+        internal::addc(cy, cy, 0);
     }
 
     __device__ __forceinline__
@@ -155,7 +150,23 @@ public:
     __device__ __forceinline__
     static void
     mad_hi_cy(fixnum &hi, fixnum &cy, fixnum a, fixnum b, fixnum c) {
-        internal::mad_hi_cy(hi, cy, a, b, c);
+        internal::mad_hi_cc(hi, a, b, c);
+        internal::addc(cy, cy, 0);
+    }
+
+    // TODO: There are weird and only included for mul_wide
+    __device__ __forceinline__
+    static void
+    mad_lo_cc(fixnum &lo, fixnum a, fixnum b, fixnum c) {
+        internal::mad_lo_cc(lo, a, b, c);
+    }
+
+    __device__ __forceinline__
+    static void
+    madc_hi_cyio(fixnum &hi, fixnum &cy, fixnum a, fixnum b, fixnum c) {
+        internal::addc_cc(c, cy, c);
+        internal::madc_hi_cc(hi, a, b, c);
+        internal::addc(cy, 0, 0);
     }
 
     // Returns the reciprocal for d.
