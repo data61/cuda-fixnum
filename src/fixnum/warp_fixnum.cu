@@ -274,23 +274,23 @@ public:
 
         fixnum ai = layout::shfl(a, 0);
         digit::mul_lo(s, ai, b);
+
         r = L == 0 ? s : r;  // r[0] = s[0];
         s = layout::shfl_down0(s, 1);
         digit::mad_hi_cy(s, cy, ai, b, s);
 
         for (int i = 1; i < layout::WIDTH; ++i) {
             fixnum ai = layout::shfl(a, i);
-            digit::mad_lo_cy(s, cy, ai, b, s);
+            digit::mad_lo_cc(s, ai, b, s);
 
-            // TODO: Substituting the shfl call into the conditional didn't work
-            // for some reason; find out why.
             fixnum s0 = layout::shfl(s, 0);
             r = (L == i) ? s0 : r; // r[i] = s[0]
             s = layout::shfl_down0(s, 1);
 
-            digit::mad_hi_cy(s, cy, ai, b, s);
+            digit::madc_hi_cyio(s, cy, ai, b, s);
         }
-        add_cy(s, s, cy);
+        cy = layout::shfl_up0(cy, 1);
+        add(s, s, cy);
         rr = r;
         ss = s;
     }

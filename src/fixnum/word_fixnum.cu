@@ -164,9 +164,11 @@ public:
     __device__ __forceinline__
     static void
     madc_hi_cyio(fixnum &hi, fixnum &cy, fixnum a, fixnum b, fixnum c) {
-        internal::addc_cc(c, cy, c);
-        internal::madc_hi_cc(hi, a, b, c);
+        // TODO: This seems more complicated than what it should be.
+        internal::madc_hi_cc(hi, a, b, cy);
         internal::addc(cy, 0, 0);
+        internal::add_cc(hi, hi, c);
+        internal::addc(cy, cy, 0);
     }
 
     // Returns the reciprocal for d.
