@@ -75,6 +75,18 @@ public:
 
     __device__ __forceinline__
     static void
+    addc(fixnum &s, fixnum a, fixnum b) {
+        internal::addc(s, a, b);
+    }
+
+    __device__ __forceinline__
+    static void
+    addc_cc(fixnum &s, fixnum a, fixnum b) {
+        internal::addc_cc(s, a, b);
+    }
+
+    __device__ __forceinline__
+    static void
     incr(fixnum &s) {
         ++s;
     }
@@ -159,16 +171,6 @@ public:
     static void
     mad_lo_cc(fixnum &lo, fixnum a, fixnum b, fixnum c) {
         internal::mad_lo_cc(lo, a, b, c);
-    }
-
-    __device__ __forceinline__
-    static void
-    madc_hi_cyio(fixnum &hi, fixnum &cy, fixnum a, fixnum b, fixnum c) {
-        // TODO: This seems more complicated than what it should be.
-        internal::madc_hi_cc(hi, a, b, cy);
-        internal::addc(cy, 0, 0);
-        internal::add_cc(hi, hi, c);
-        internal::addc(cy, cy, 0);
     }
 
     // Returns the reciprocal for d.

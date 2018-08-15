@@ -287,7 +287,9 @@ public:
             r = (L == i) ? s0 : r; // r[i] = s[0]
             s = layout::shfl_down0(s, 1);
 
-            digit::madc_hi_cyio(s, cy, ai, b, s);
+            digit::addc_cc(s, s, cy);  // add carry from prev digit
+            digit::addc(cy, 0, 0);     // cy = CC.CF
+            digit::mad_hi_cy(s, cy, ai, b, s);
         }
         cy = layout::shfl_up0(cy, 1);
         add(s, s, cy);
