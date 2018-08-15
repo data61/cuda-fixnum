@@ -27,34 +27,23 @@ void die_if(bool p, const string &msg) {
     }
 }
 
-::testing::AssertionResult
+int
 arrays_are_equal(
     const uint8_t *expected, size_t expected_len,
     const uint8_t *actual, size_t actual_len)
 {
-    if (expected_len > actual_len) {
-        return ::testing::AssertionFailure()
-            << "arrays don't have the same length";
-    }
+    if (expected_len > actual_len)
+        return actual_len;
     size_t i;
     for (i = 0; i < expected_len; ++i) {
-        if (expected[i] != actual[i]) {
-            return ::testing::AssertionFailure()
-                << "arrays differ: expected[" << i << "] = "
-                << static_cast<int>(expected[i])
-                << " but actual[" << i << "] = "
-                << static_cast<int>(actual[i]);
-        }
+        if (expected[i] != actual[i])
+            return i;
     }
     for (; i < actual_len; ++i) {
-        if (actual[i] != 0) {
-            return ::testing::AssertionFailure()
-                << "arrays differ: expected[" << i << "] = 0"
-                << " but actual[" << i << "] = "
-                << static_cast<int>(actual[i]);
-        }
+        if (actual[i] != 0)
+            return i;
     }
-    return ::testing::AssertionSuccess();
+    return -1;
 }
 
 
@@ -150,6 +139,7 @@ void check_result(
     // point to copying them into buf.
     byte_array buf(nbytes);
 
+    int arg_idx = 0;
     for (auto arg : args) {
         auto buf_iter = buf.begin();
         for (uint32_t i = 0; i < nvecs; ++i) {
@@ -157,7 +147,9 @@ void check_result(
             buf_iter += fixnum_bytes*vec_len;
             tcase += skip;
         }
-        EXPECT_TRUE(arrays_are_equal(buf.data(), nbytes, arg->get_ptr(), nbytes));
+        int r = arrays_are_equal(buf.data(), nbytes, arg->get_ptr(), nbytes);
+        EXPECT_TRUE(r < 0) << "failed near byte " << r << " in argument " << arg_idx;
+        ++arg_idx;
     }
 }
 
