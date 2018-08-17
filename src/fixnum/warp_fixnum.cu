@@ -272,21 +272,22 @@ public:
         s = fixnum::zero();
         digit cy = digit::zero();
 
-        fixnum ai = layout::shfl(a, 0);
+        fixnum ai = get(a, 0);
         digit::mul_lo(s, ai, b);
-
         r = L == 0 ? s : r;  // r[0] = s[0];
         s = layout::shfl_down0(s, 1);
         digit::mad_hi_cy(s, cy, ai, b, s);
 
         for (int i = 1; i < layout::WIDTH; ++i) {
-            fixnum ai = layout::shfl(a, i);
+            fixnum ai = get(a, i);
             digit::mad_lo_cc(s, ai, b, s);
 
-            fixnum s0 = layout::shfl(s, 0);
+            fixnum s0 = get(s, 0);
             r = (L == i) ? s0 : r; // r[i] = s[0]
             s = layout::shfl_down0(s, 1);
 
+            // TODO: Investigate whether deferring this carry resolution until
+            // after the loop improves performance much.
             digit::addc_cc(s, s, cy);  // add carry from prev digit
             digit::addc(cy, 0, 0);     // cy = CC.CF
             digit::mad_hi_cy(s, cy, ai, b, s);
