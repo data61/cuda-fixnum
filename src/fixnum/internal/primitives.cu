@@ -88,7 +88,7 @@ namespace internal {
         asm ("{\n\t"
              " .reg .u64 tmp;\n\t"
              " mul.wide.u32 tmp, %2, %3;\n\t"
-             " mov.b64 { %0, %1 }, tmp;\n\t"
+             " mov.b64 { %1, %0 }, tmp;\n\t"
              "}"
              : "=r"(hi), "=r"(lo)
              : "r"(a), "r"(b));
@@ -112,7 +112,7 @@ namespace internal {
         asm ("{\n\t"
              " .reg .u64 tmp;\n\t"
              " mad.wide.u32 tmp, %2, %3, %4;\n\t"
-             " mov.b64 { %0, %1 }, tmp;\n\t"
+             " mov.b64 { %1, %0 }, tmp;\n\t"
              "}"
              : "=r"(hi), "=r"(lo)
              : "r"(a), "r"(b), "r"(c));
