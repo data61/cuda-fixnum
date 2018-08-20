@@ -27,6 +27,15 @@ struct mul_wide {
 };
 
 template< typename fixnum >
+struct sqr_wide {
+    __device__ void operator()(fixnum &r, fixnum a) {
+        fixnum rr, ss;
+        fixnum::sqr_wide(ss, rr, a);
+        r = ss;
+    }
+};
+
+template< typename fixnum >
 struct my_modexp {
     __device__ void operator()(fixnum &z, fixnum x) {
         fixnum zz;
@@ -97,6 +106,8 @@ int main(int argc, char *argv[]) {
     bench_func<mul_lo>("mul_lo", m);
     puts("");
     bench_func<mul_wide>("mul_wide", m);
+    puts("");
+    bench_func<sqr_wide>("sqr_wide", m);
     puts("");
     bench_func<my_modexp>("modexp", m / 100);
 
