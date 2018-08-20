@@ -304,9 +304,92 @@ public:
         mul_wide(s, r, a, b);
     }
 
-    __device__ static void sqr_wide(fixnum &s, fixnum &r, fixnum a) {
-        // TODO: Implement my smarter squaring algo.
-        mul_wide(s, r, a, a);
+    /*
+     * Adapt "rediagonalisation" trick described in Figure 4 of Ozturk,
+     * Guilford, Gopal (2013) "Large Integer Squaring on Intel
+     * Architecture Processors".
+     */
+    __device__ static void
+    sqr_wide(fixnum &ss, fixnum &rr, fixnum a)
+    {
+        constexpr int W = layout::WIDTH;
+        int L = layout::laneIdx();
+        fixnum r, s;
+        r = fixnum::zero();
+        s = fixnum::zero();
+        digit cy = digit::zero();
+
+        for (int i = 0; i < W / 2; ++i) {
+            fixnum a1, a2;
+            int lpi = L + i;
+            // TODO: Explain how on Earth these formulae pick out the correct
+            // terms for the squaring. NB: Could achieve the same with
+            // shuffle's; the expressions would be clearer, but the shuffles
+            // would (presumably) be more expensive.
+            a1 = get(a, lpi < W ? i : (L - W/2 + 1));
+            a2 = get(a, lpi < W ? lpi + 1 : W/2 + i);
+
+            // FIXME: Find a cleaner way to do this, preferably by actually
+            // calculating and using the square terms.
+            fixnum::set(a1, digit::zero(), W - 1);
+            fixnum::set(a2, digit::zero(), W - 1);
+
+            digit::mad_lo_cc(s, a1, a2, s);
+
+            fixnum s0 = get(s, 0);
+            r = (L == i) ? s0 : r; // r[i] = s[0]
+            s = layout::shfl_down0(s, 1);
+
+            digit::addc_cc(s, s, cy);  // add carry from prev digit
+            digit::addc(cy, 0, 0);     // cy = CC.CF
+            digit::mad_hi_cy(s, cy, a1, a2, s);
+        }
+
+        cy = layout::shfl_up0(cy, 1);
+        add(s, s, cy);
+
+        fixnum overflow;
+        lshift(s, s, digit::BITS + 1);  // s *= 2
+        lshift(r, overflow, r, digit::BITS + 1);  // r *= 2
+        // Propagate r overflow to s
+        add_cy(s, cy, s, overflow); // really a logior, since s was just lshifted.
+        assert(digit::is_zero(cy));
+
+        // Calculate and add the squares on the diagonal. NB: by parallelising
+        // the multiplication like this then shuffling the results, we lose the
+        // ability to use a fused multiply-and-add call.
+        // TODO: We should be able to calculate and save this value in the while
+        // loop above; currently the while loop wastes one multiplication per
+        // iteration.
+        digit ai_sqr_hi, ai_sqr_lo;
+        digit::mul_wide(ai_sqr_hi, ai_sqr_lo, a, a);
+
+        digit t_lo, t_hi, r_diag, s_diag;
+        // NB: This version saves one shuffle at the expense of more complicated
+        // lane calculations (~5 vs ~2 bitops). Alternative version is in a
+        // comment below.
+        int is_hi_half = L >= W / 2;
+        int lane_shift = (L << 1) & (W - 1); // 2*L % width;
+        t_lo = layout::shfl(ai_sqr_lo, lane_shift + is_hi_half);
+        t_hi = layout::shfl(ai_sqr_hi, lane_shift + !is_hi_half);
+        r_diag = (L & 1) ? t_hi : t_lo;
+        t_hi = (L & 1) ? t_lo : t_hi;
+        s_diag = layout::shfl(t_hi, L^1U); // switch odd and even lanes
+#if 0
+        t_lo = layout::shfl(ai_sqr_lo, L / 2);
+        t_hi = layout::shfl(ai_sqr_hi, L / 2);
+        r_diag = (L & 1) ? t_hi : t_lo;
+        t_lo = layout::shfl(ai_sqr_lo, (L + layout::WIDTH) / 2);
+        t_hi = layout::shfl(ai_sqr_hi, (L + layout::WIDTH) / 2);
+        s_diag = (L & 1) ? t_hi : t_lo;
+#endif
+
+        add_cy(r, cy, r, r_diag);
+        add(s, s, s_diag);
+        add(s, s, cy);
+
+        rr = r;
+        ss = s;
     }
 
     __device__ static void sqr_hi(fixnum &s, fixnum a) {
