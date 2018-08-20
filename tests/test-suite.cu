@@ -320,6 +320,93 @@ TYPED_TEST(TypedPrimitives, mul_wide) {
 }
 
 template< typename fixnum >
+struct sqr_lo {
+    __device__ void operator()(fixnum &r, fixnum a) {
+        fixnum rr;
+        fixnum::sqr_lo(rr, a);
+        r = rr;
+    }
+};
+
+TYPED_TEST(TypedPrimitives, sqr_lo) {
+    typedef typename TestFixture::fixnum fixnum;
+    typedef fixnum_array<fixnum> fixnum_array;
+
+    fixnum_array *res, *xs;
+    vector<byte_array> tcases;
+
+    read_tcases(tcases, xs, "tests/sqr_wide", 1);
+    int vec_len = xs->length();
+    res = fixnum_array::create(vec_len);
+
+    fixnum_array::template map<sqr_lo>(res, xs);
+    auto tcase = tcases.begin();
+    check_result(tcase, vec_len, {res}, 2);
+
+    delete res;
+    delete xs;
+}
+
+template< typename fixnum >
+struct sqr_hi {
+    __device__ void operator()(fixnum &r, fixnum a) {
+        fixnum rr;
+        fixnum::sqr_hi(rr, a);
+        r = rr;
+    }
+};
+
+TYPED_TEST(TypedPrimitives, sqr_hi) {
+    typedef typename TestFixture::fixnum fixnum;
+    typedef fixnum_array<fixnum> fixnum_array;
+
+    fixnum_array *res, *xs;
+    vector<byte_array> tcases;
+
+    read_tcases(tcases, xs, "tests/sqr_wide", 1);
+    int vec_len = xs->length();
+    res = fixnum_array::create(vec_len);
+
+    fixnum_array::template map<sqr_hi>(res, xs);
+    auto tcase = tcases.begin() + 1;
+    check_result(tcase, vec_len, {res}, 2);
+
+    delete res;
+    delete xs;
+}
+
+template< typename fixnum >
+struct sqr_wide {
+    __device__ void operator()(fixnum &s, fixnum &r, fixnum a) {
+        fixnum rr, ss;
+        fixnum::sqr_wide(ss, rr, a);
+        s = ss;
+        r = rr;
+    }
+};
+
+TYPED_TEST(TypedPrimitives, sqr_wide) {
+    typedef typename TestFixture::fixnum fixnum;
+    typedef fixnum_array<fixnum> fixnum_array;
+
+    fixnum_array *his, *los, *xs;
+    vector<byte_array> tcases;
+
+    read_tcases(tcases, xs, "tests/sqr_wide", 1);
+    int vec_len = xs->length();
+    his = fixnum_array::create(vec_len);
+    los = fixnum_array::create(vec_len);
+
+    fixnum_array::template map<sqr_wide>(his, los, xs);
+    auto tcase = tcases.begin();
+    check_result(tcase, vec_len, {los, his});
+
+    delete his;
+    delete los;
+    delete xs;
+}
+
+template< typename fixnum >
 struct my_modexp {
     __device__ void operator()(fixnum &z, fixnum x, fixnum e, fixnum m) {
         modexp<fixnum> me(m, e);
