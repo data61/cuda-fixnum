@@ -253,11 +253,6 @@ public:
         add(r, r, cy);
     }
 
-    __device__ static void sqr_lo(fixnum &r, fixnum a) {
-        // TODO: Implement my smarter squaring algo.
-        mul_lo(r, a, a);
-    }
-
     /*
      * (s, r) = a * b
      *
@@ -308,6 +303,9 @@ public:
      * Adapt "rediagonalisation" trick described in Figure 4 of Ozturk,
      * Guilford, Gopal (2013) "Large Integer Squaring on Intel
      * Architecture Processors".
+     *
+     * TODO: This function is only definitively faster than mul_wide when WIDTH
+     * is 32 (but in that case it's ~50% faster).
      */
     __device__ static void
     sqr_wide(fixnum &ss, fixnum &rr, fixnum a)
@@ -323,9 +321,9 @@ public:
             fixnum a1, a2;
             int lpi = L + i;
             // TODO: Explain how on Earth these formulae pick out the correct
-            // terms for the squaring. NB: Could achieve the same with
-            // shuffle's; the expressions would be clearer, but the shuffles
-            // would (presumably) be more expensive.
+            // terms for the squaring.
+            // NB: Could achieve the same with shuffle's; the expressions would
+            // be clearer, but the shuffles would (presumably) be more expensive.
             a1 = get(a, lpi < W ? i : (L - W/2 + 1));
             a2 = get(a, lpi < W ? lpi + 1 : W/2 + i);
 
@@ -348,12 +346,22 @@ public:
         cy = layout::shfl_up0(cy, 1);
         add(s, s, cy);
 
-        fixnum overflow;
-        lshift(s, s, digit::BITS + 1);  // s *= 2
-        lshift(r, overflow, r, digit::BITS + 1);  // r *= 2
-        // Propagate r overflow to s
-        add_cy(s, cy, s, overflow); // really a logior, since s was just lshifted.
-        assert(digit::is_zero(cy));
+        // TODO: Urgly business.
+        if (W == 2) {
+            fixnum overflow;
+            lshift(s, s, 1);  // s *= 2
+            lshift(r, overflow, r, digit::BITS + 1);  // r *= 2
+            // Propagate r overflow to s
+            add_cy(s, cy, s, overflow); // really a logior, since s was just lshifted.
+            assert(digit::is_zero(cy));
+        } else {
+            fixnum overflow, underflow;
+            lshift(r, overflow, r, digit::BITS + 1);  // r *= 2
+            assert(digit::is_zero(overflow));
+            rshift(s, underflow, s, BITS/2 - (digit::BITS + 1));
+            add_cy(r, cy, r, underflow); // really a logior, since r was just lshifted.
+            assert(digit::is_zero(cy));
+        }
 
         // Calculate and add the squares on the diagonal. NB: by parallelising
         // the multiplication like this then shuffling the results, we lose the
@@ -365,6 +373,7 @@ public:
         digit::mul_wide(ai_sqr_hi, ai_sqr_lo, a, a);
 
         digit t_lo, t_hi, r_diag, s_diag;
+#if 0
         // NB: This version saves one shuffle at the expense of more complicated
         // lane calculations (~5 vs ~2 bitops). Alternative version is in a
         // comment below.
@@ -375,21 +384,27 @@ public:
         r_diag = (L & 1) ? t_hi : t_lo;
         t_hi = (L & 1) ? t_lo : t_hi;
         s_diag = layout::shfl(t_hi, L^1U); // switch odd and even lanes
-#if 0
+#endif
         t_lo = layout::shfl(ai_sqr_lo, L / 2);
         t_hi = layout::shfl(ai_sqr_hi, L / 2);
         r_diag = (L & 1) ? t_hi : t_lo;
         t_lo = layout::shfl(ai_sqr_lo, (L + layout::WIDTH) / 2);
         t_hi = layout::shfl(ai_sqr_hi, (L + layout::WIDTH) / 2);
         s_diag = (L & 1) ? t_hi : t_lo;
-#endif
 
         add_cy(r, cy, r, r_diag);
         add(s, s, s_diag);
+        cy = L == 0 ? cy : (digit)0;
         add(s, s, cy);
 
         rr = r;
         ss = s;
+    }
+
+    __device__ static void sqr_lo(fixnum &r, fixnum a) {
+        // TODO: Implement my smarter squaring algo.
+        fixnum s;
+        sqr_wide(s, r, a);
     }
 
     __device__ static void sqr_hi(fixnum &s, fixnum a) {
