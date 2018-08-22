@@ -315,87 +315,77 @@ public:
         fixnum r, s;
         r = fixnum::zero();
         s = fixnum::zero();
-        digit cy = digit::zero();
+
+        fixnum diag_lo = fixnum::zero();
+        digit cy;
+        digit::add_cc(cy, 0, 0); // clear CC.CF
 
         for (int i = 0; i < W / 2; ++i) {
-            fixnum a1, a2;
+            fixnum a1, a2, s0;
             int lpi = L + i;
             // TODO: Explain how on Earth these formulae pick out the correct
             // terms for the squaring.
-            // NB: Could achieve the same with shuffle's; the expressions would
-            // be clearer, but the shuffles would (presumably) be more expensive.
-            a1 = get(a, lpi < W ? i : (L - W/2 + 1));
-            a2 = get(a, lpi < W ? lpi + 1 : W/2 + i);
+            // NB: Could achieve the same with iterative shuffle's; the expressions
+            // would be clearer, but the shuffles would (presumably) be more expensive.
+            a1 = get(a, lpi < W ? i : lpi - W/2);
+            a2 = get(a, lpi < W ? lpi : W/2 + i);
 
-            // FIXME: Find a cleaner way to do this, preferably by actually
-            // calculating and using the square terms.
-            fixnum::set(a1, digit::zero(), W - 1);
-            fixnum::set(a2, digit::zero(), W - 1);
+            assert(L != 0 || digit::cmp(a1,a2)==0); // a1 = a2 when L == 0
 
-            digit::mad_lo_cc(s, a1, a2, s);
+            fixnum hi, lo;
+            digit::mul_wide(hi, lo, a1, a2);
 
-            fixnum s0 = get(s, 0);
-            r = (L == i) ? s0 : r; // r[i] = s[0]
+            ////digit::madc_lo_cc(s, a1, a2, s);
+            //digit::mul_lo(tmp, a1, a2);
+            digit::addc_cc(s, s, lo);
+            lo = get(lo, 0);
+            diag_lo = (L == 2*i) ? lo : diag_lo;
+
+            s0 = get(s, 0);
+            r = (L == 2*i) ? s0 : r; // r[2i] = s[0]
             s = layout::shfl_down0(s, 1);
 
-            digit::addc_cc(s, s, cy);  // add carry from prev digit
-            digit::addc(cy, 0, 0);     // cy = CC.CF
-            digit::mad_hi_cy(s, cy, a1, a2, s);
+            ////digit::madc_hi_cc(s, a1, a2, s);
+            //digit::mul_hi(tmp, a1, a2);
+            digit::addc_cc(s, s, hi);
+            hi = get(hi, 0);
+            diag_lo = (L == 2*i + 1) ? hi : diag_lo;
+
+            s0 = get(s, 0);
+            r = (L == 2*i + 1) ? s0 : r; // r[2i+1] = s[0]
+            s = layout::shfl_down0(s, 1);
         }
 
-        cy = layout::shfl_up0(cy, 1);
+        if (W == 1) { mul_wide(s, r, a, a); } else {
+
+        // TODO: All these carries and borrows into s should be accumulated into
+        // one call.
+        digit::addc(cy, 0, 0); // read last CC.CF
         add(s, s, cy);
 
-        // TODO: Urgly business.
-        if (W == 2) {
-            fixnum overflow;
-            lshift(s, s, 1);  // s *= 2
-            lshift(r, overflow, r, digit::BITS + 1);  // r *= 2
-            // Propagate r overflow to s
-            add_cy(s, cy, s, overflow); // really a logior, since s was just lshifted.
-            assert(digit::is_zero(cy));
-        } else {
-            fixnum overflow, underflow;
-            lshift(r, overflow, r, digit::BITS + 1);  // r *= 2
-            assert(digit::is_zero(overflow));
-            rshift(s, underflow, s, BITS/2 - (digit::BITS + 1));
-            add_cy(r, cy, r, underflow); // really a logior, since r was just lshifted.
-            assert(digit::is_zero(cy));
+        fixnum underflow, overflow;
+        lshift(s, s, 1);  // s *= 2
+        lshift(r, overflow, r, 1);  // r *= 2
+        add_cy(s, cy, s, overflow); // really a logior, since s was just lshifted.
+        assert(digit::is_zero(cy));
+
+        // Doubling r above means we've doubled the diagonal terms, though they
+        // shouldn't be. Compensate by subtracting a copy of them here.
+        digit br;
+        sub_br(r, br, r, diag_lo);
+        br = (L == 0) ? br : digit::zero();
+        sub(s, s, br);
+
+        // TODO: This is wasteful, since the odd lane lo's are discarded as are
+        // the even lane hi's.
+        fixnum lo, hi, ai = get(a, W/2 + L/2);
+        digit::mul_lo(lo, ai, ai);
+        digit::mul_hi(hi, ai, ai);
+        fixnum diag_hi = L & 1 ? hi : lo;
+
+        add(s, s, diag_hi);
+
         }
-
-        // Calculate and add the squares on the diagonal. NB: by parallelising
-        // the multiplication like this then shuffling the results, we lose the
-        // ability to use a fused multiply-and-add call.
-        // TODO: We should be able to calculate and save this value in the while
-        // loop above; currently the while loop wastes one multiplication per
-        // iteration.
-        digit ai_sqr_hi, ai_sqr_lo;
-        digit::mul_wide(ai_sqr_hi, ai_sqr_lo, a, a);
-
-        digit t_lo, t_hi, r_diag, s_diag;
-#if 0
-        // NB: This version saves one shuffle at the expense of more complicated
-        // lane calculations (~5 vs ~2 bitops). Alternative version is in a
-        // comment below.
-        int is_hi_half = L >= W / 2;
-        int lane_shift = (L << 1) & (W - 1); // 2*L % width;
-        t_lo = layout::shfl(ai_sqr_lo, lane_shift + is_hi_half);
-        t_hi = layout::shfl(ai_sqr_hi, lane_shift + !is_hi_half);
-        r_diag = (L & 1) ? t_hi : t_lo;
-        t_hi = (L & 1) ? t_lo : t_hi;
-        s_diag = layout::shfl(t_hi, L^1U); // switch odd and even lanes
-#endif
-        t_lo = layout::shfl(ai_sqr_lo, L / 2);
-        t_hi = layout::shfl(ai_sqr_hi, L / 2);
-        r_diag = (L & 1) ? t_hi : t_lo;
-        t_lo = layout::shfl(ai_sqr_lo, (L + layout::WIDTH) / 2);
-        t_hi = layout::shfl(ai_sqr_hi, (L + layout::WIDTH) / 2);
-        s_diag = (L & 1) ? t_hi : t_lo;
-
-        add_cy(r, cy, r, r_diag);
-        add(s, s, s_diag);
-        cy = L == 0 ? cy : (digit)0;
-        add(s, s, cy);
 
         rr = r;
         ss = s;

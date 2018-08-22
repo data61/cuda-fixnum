@@ -75,6 +75,12 @@ public:
 
     __device__ __forceinline__
     static void
+    add_cc(fixnum &s, fixnum a, fixnum b) {
+        internal::add_cc(s, a, b);
+    }
+
+    __device__ __forceinline__
+    static void
     addc(fixnum &s, fixnum a, fixnum b) {
         internal::addc(s, a, b);
     }
