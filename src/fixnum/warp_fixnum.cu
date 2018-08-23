@@ -337,7 +337,6 @@ public:
             digit::add_cyio(s, cy, s, lo);
             lo = get(lo, 0);
             diag_lo = (L == 2*i) ? lo : diag_lo;
-
             s0 = get(s, 0);
             r = (L == 2*i) ? s0 : r; // r[2i] = s[0]
             s = layout::shfl_down0(s, 1);
@@ -345,7 +344,6 @@ public:
             digit::add_cyio(s, cy, s, hi);
             hi = get(hi, 0);
             diag_lo = (L == 2*i + 1) ? hi : diag_lo;
-
             s0 = get(s, 0);
             r = (L == 2*i + 1) ? s0 : r; // r[2i+1] = s[0]
             s = layout::shfl_down0(s, 1);
