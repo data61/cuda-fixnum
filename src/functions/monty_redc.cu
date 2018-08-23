@@ -1,36 +1,32 @@
 #pragma once
 
-#include "util/managed.cu"
-
-template< typename fixnum_impl >
-class monty_redc : public managed {
-    typedef typename fixnum_impl::word_tp word_tp;
-    static constexpr int WIDTH = fixnum_impl::SLOT_WIDTH;
+template< typename fixnum >
+class monty_redc {
+    typedef typename fixnum::digit digit;
 
     // Modulus for Monty arithmetic
-    word_tp mod[WIDTH];
-    // inv_mod * mod = -1 % 2^DIGIT_BITS.
-    word_tp  inv_mod;
+    fixnum mod;
+    // inv_mod * mod = -1 % 2^digit::BITS.
+    digit  inv_mod;
 
 public:
-    typedef typename fixnum_impl::fixnum fixnum;
-
-    __device__ void operator()(fixnum &s, fixnum r) {
-        static constexpr int T = slot_layout::toplaneIdx;
+    __device__ void operator()(fixnum &s, fixnum r_hi, fixnum r_lo) {
+        static constexpr int T = fixnum::layout::toplaneIdx;
+        static constexpr int WIDTH = fixnum::SLOT_WIDTH;
         int L = slot_layout::laneIdx();
-        word_tp mod, inv_mod, x, msw;
+        digit x, msw;
 
-        mod = this->mod[L];
-        x = r;
+        x = r_lo;
         for (int i = 0; i < WIDTH; ++i) {
-            word_tp u = slot_layout::shfl(r, i) * inv_mod;
-            msw = fixnum_impl::addmuli(x, mod, u);
+            digit u = fixnum::get(r_lo, i) * inv_mod;
+            msw = fixnum::addmuli(x, mod, u);
 
-            r = (L == i) ? msw : r;
-            x = slot_layout::shfl_down(x, 1);
-            x = (L == T) ? slot_layout::shfl(s, i) : x;
+            r_lo = (L == i) ? msw : r_lo;
+            x = layout::shfl_down0(x, 1);
+            r_hi_i = fixnum::get(r_hi, i);
+            x = (L == T) ? r_hi_i : x;
         }
-        msw = fixnum_impl::add_cy(s, x, r);
-        digit_normalise(s, msw, mod);
+        fixnum::add_cy(s, msw, x, r_lo);
+        normalise(s, msw, mod);
     }
 };
