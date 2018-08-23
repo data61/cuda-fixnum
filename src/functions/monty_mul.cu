@@ -50,11 +50,11 @@ private:
 
     // Modulus for Monty arithmetic
     fixnum mod;
-    // R_mod = 2^FIXNUM_BITS % mod
+    // R_mod = 2^fixnum::BITS % mod
     fixnum R_mod;
     // Rsqr = R^2 % mod
     fixnum Rsqr_mod;
-    // inv_mod * mod = -1 % 2^WORD_BITS.
+    // inv_mod * mod = -1 % 2^digit::BITS.
     digit  inv_mod;
 
     // TODO: We save this after using it in the constructor; work out
