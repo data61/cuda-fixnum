@@ -232,16 +232,12 @@ public:
      * i.e. the same size as the inputs.
      */
     __device__ static void mul_lo(fixnum &r, fixnum a, fixnum b) {
-        // TODO: This should be smaller, probably uint16_t (smallest
-        // possible for addition).  Strangely, the naive translation to
-        // the smaller size broke; to investigate.
         digit cy = digit::zero();
 
         r = zero();
         for (int i = layout::WIDTH - 1; i >= 0; --i) {
             digit aa = layout::shfl(a, i);
 
-            // TODO: See if using umad.wide improves this.
             digit::mad_hi_cy(r, cy, aa, b, r);
             // TODO: Could use rotate here, which is slightly
             // cheaper than shfl_up0...
