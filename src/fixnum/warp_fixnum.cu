@@ -334,6 +334,8 @@ public:
             fixnum hi, lo;
             digit::mul_wide(hi, lo, a1, a2);
 
+            // TODO: These two (almost identical) blocks cause lots of pipeline
+            // stalls; need to find a way to reduce their data dependencies.
             digit::add_cyio(s, cy, s, lo);
             lo = get(lo, 0);
             diag_lo = (L == 2*i) ? lo : diag_lo;
