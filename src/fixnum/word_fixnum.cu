@@ -75,6 +75,15 @@ public:
 
     __device__ __forceinline__
     static void
+    add_cyio(fixnum &s, digit &cy, fixnum a, fixnum b) {
+        s = a + cy;
+        cy = s < a;
+        s += b;
+        cy |= s < b;
+    }
+
+    __device__ __forceinline__
+    static void
     add_cc(fixnum &s, fixnum a, fixnum b) {
         internal::add_cc(s, a, b);
     }

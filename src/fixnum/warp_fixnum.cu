@@ -308,17 +308,16 @@ public:
      * is 32 (but in that case it's ~50% faster).
      */
     __device__ static void
-    sqr_wide(fixnum &ss, fixnum &rr, fixnum a)
+    sqr_wide_(fixnum &ss, fixnum &rr, fixnum a)
     {
         constexpr int W = layout::WIDTH;
         int L = layout::laneIdx();
+
         fixnum r, s;
         r = fixnum::zero();
         s = fixnum::zero();
-
         fixnum diag_lo = fixnum::zero();
-        digit cy;
-        digit::add_cc(cy, 0, 0); // clear CC.CF
+        digit cy = digit::zero();
 
         for (int i = 0; i < W / 2; ++i) {
             fixnum a1, a2, s0;
@@ -335,9 +334,7 @@ public:
             fixnum hi, lo;
             digit::mul_wide(hi, lo, a1, a2);
 
-            ////digit::madc_lo_cc(s, a1, a2, s);
-            //digit::mul_lo(tmp, a1, a2);
-            digit::addc_cc(s, s, lo);
+            digit::add_cyio(s, cy, s, lo);
             lo = get(lo, 0);
             diag_lo = (L == 2*i) ? lo : diag_lo;
 
@@ -345,9 +342,7 @@ public:
             r = (L == 2*i) ? s0 : r; // r[2i] = s[0]
             s = layout::shfl_down0(s, 1);
 
-            ////digit::madc_hi_cc(s, a1, a2, s);
-            //digit::mul_hi(tmp, a1, a2);
-            digit::addc_cc(s, s, hi);
+            digit::add_cyio(s, cy, s, hi);
             hi = get(hi, 0);
             diag_lo = (L == 2*i + 1) ? hi : diag_lo;
 
@@ -356,11 +351,8 @@ public:
             s = layout::shfl_down0(s, 1);
         }
 
-        if (W == 1) { mul_wide(s, r, a, a); } else {
-
         // TODO: All these carries and borrows into s should be accumulated into
         // one call.
-        digit::addc(cy, 0, 0); // read last CC.CF
         add(s, s, cy);
 
         fixnum underflow, overflow;
@@ -385,10 +377,21 @@ public:
 
         add(s, s, diag_hi);
 
-        }
-
         rr = r;
         ss = s;
+    }
+
+    __device__ __forceinline__ static void
+    sqr_wide(fixnum &ss, fixnum &rr, fixnum a)
+    {
+        // Width below which the general multiplication function is used instead
+        // of this one. TODO: 16 is very high; need to work out why we're not
+        // doing better on smaller widths.
+        constexpr int SQUARING_WIDTH_THRESHOLD = 16;
+        if (layout::WIDTH < SQUARING_WIDTH_THRESHOLD)
+            mul_wide(ss, rr, a, a);
+        else
+            sqr_wide_(ss, rr, a);
     }
 
     __device__ static void sqr_lo(fixnum &r, fixnum a) {
