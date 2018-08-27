@@ -232,6 +232,7 @@ public:
      * i.e. the same size as the inputs.
      */
     __device__ static void mul_lo(fixnum &r, fixnum a, fixnum b) {
+        // TODO: Implement specific mul_lo function.
         digit cy = digit::zero();
 
         r = zero();
@@ -290,7 +291,7 @@ public:
     }
 
     __device__ static void mul_hi(fixnum &s, fixnum a, fixnum b) {
-        // TODO: implement this properly
+        // TODO: Implement specific mul_hi function.
         fixnum r;
         mul_wide(s, r, a, b);
     }
@@ -390,13 +391,13 @@ public:
     }
 
     __device__ static void sqr_lo(fixnum &r, fixnum a) {
-        // TODO: Implement my smarter squaring algo.
+        // TODO: Implement specific sqr_lo function.
         fixnum s;
         sqr_wide(s, r, a);
     }
 
     __device__ static void sqr_hi(fixnum &s, fixnum a) {
-        // TODO: implement this properly
+        // TODO: Implement specific sqr_hi function.
         fixnum r;
         sqr_wide(s, r, a);
     }
