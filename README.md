@@ -5,7 +5,7 @@ The primary use case for fast arithmetic of numbers in the range covered by `cud
 
 Finally, the library is designed to be _fast_. Through exploitation of warp-synchronous programming, vote functions, and deferred carry handling, the primitives of the library are currently competitive with the state-of-the-art in the literature for modular multiplication and modular exponentiation on GPUs.  The design of the library allows transparent substitution of the underlying arithmetic, allowing the user to select whichever performs best on the available hardware. Moreover, several algorithms, both novel and from the literature, will be incorporated shortly that will improve performance by a further 25-50%.
 
-The library is currently at the alpha stage of development.  It has many rough edges, but most features are present and it is performant enough to be competitive.  Comments, questions and contributions are welcome!
+The library is currently at the _alpha_ stage of development.  It has many rough edges, but most features are present and it is performant enough to be competitive.  Comments, questions and contributions are welcome!
 
 ## Example
 
@@ -198,4 +198,4 @@ The principal author of `cuda-fixnum` is Dr Hamish Ivey-Law (@unzvfu). Email: _h
 
 `cuda-fixnum` is copyright (c) Commonwealth Scientific and Industrial Research Organisation (CSIRO).
 
-`cuda-fixnum` is released under a modified MIT/BSD Open Source Licence (see [LICENSE](cuda-fixnum/LICENCE) for details).
+`cuda-fixnum` is released under a modified MIT/BSD Open Source Licence (see [LICENCE](LICENCE) for details).
