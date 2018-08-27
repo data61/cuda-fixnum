@@ -290,8 +290,7 @@ public:
     __device__ __forceinline__
     static void
     lshift(fixnum &z, fixnum &overflow, fixnum x, unsigned b) {
-        overflow = x >> (BITS - b);
-        z = x << b;
+        internal::lshift(overflow, z, 0, x, b);
     }
 
     __device__ __forceinline__
@@ -303,8 +302,7 @@ public:
     __device__ __forceinline__
     static void
     rshift(fixnum &z, fixnum &underflow, fixnum x, unsigned b) {
-        underflow = x & (((fixnum)1 << b) - 1);
-        z = x >> b;
+        internal::rshift(z, underflow, x, 0, b);
     }
 
     /*

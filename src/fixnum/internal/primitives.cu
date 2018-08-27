@@ -226,6 +226,102 @@ namespace internal {
              : "l"(a), "l" (b), "l"(c));
     }
 
+    // Source: https://docs.nvidia.com/cuda/parallel-thread-execution/#logic-and-shift-instructions-shf
+    __device__ __forceinline__
+    void
+    lshift(u32 &out_hi, u32 &out_lo, u32 in_hi, u32 in_lo, unsigned b) {
+        asm ("shf.l.clamp.b32 %1, %2, %3, %4;\n\t"
+             "shl.b32 %0, %2, %4;"
+             : "=r"(out_lo), "=r"(out_hi) : "r"(in_lo), "r"(in_hi), "r"(b));
+    }
+
+    /*
+     * Left shift by b bits; b <= 32.
+     * Source: https://docs.nvidia.com/cuda/parallel-thread-execution/#logic-and-shift-instructions-shf
+     */
+    __device__ __forceinline__
+    void
+    lshift_b32(u64 &out_hi, u64 &out_lo, u64 in_hi, u64 in_lo, unsigned b) {
+        assert(b <= 32);
+        asm ("{\n\t"
+             " .reg .u32 t1;\n\t"
+             " .reg .u32 t2;\n\t"
+             " .reg .u32 t3;\n\t"
+             " .reg .u32 t4;\n\t"
+             " .reg .u32 t5;\n\t"
+             " .reg .u32 t6;\n\t"
+             " .reg .u32 t7;\n\t"
+             " .reg .u32 t8;\n\t"
+             // (t4, t3, t2, t1) = (in_hi, in_lo)
+             " mov.b64 { t3, t4 }, %3;\n\t"
+             " mov.b64 { t1, t2 }, %2;\n\t"
+             " shf.l.clamp.b32 t8, t3, t4, %4;\n\t"
+             " shf.l.clamp.b32 t7, t2, t3, %4;\n\t"
+             " shf.l.clamp.b32 t6, t1, t2, %4;\n\t"
+             " shl.b32 t5, t1, %4;\n\t"
+             " mov.b64 %1, { t7, t8 };\n\t"
+             " mov.b64 %0, { t5, t6 };\n\t"
+             "}"
+             : "=l"(out_lo), "=l"(out_hi) : "l"(in_lo), "l"(in_hi), "r"(b));
+    }
+
+    __device__ __forceinline__
+    void
+    lshift(u64 &out_hi, u64 &out_lo, u64 in_hi, u64 in_lo, unsigned b) {
+        assert(b <= 64);
+        unsigned c = min(b, 32);
+        lshift_b32(out_hi, out_lo, in_hi, in_lo, c);
+        lshift_b32(out_hi, out_lo, out_hi, out_lo, b - c);
+    }
+
+    // Source: https://docs.nvidia.com/cuda/parallel-thread-execution/#logic-and-shift-instructions-shf
+    __device__ __forceinline__
+    void
+    rshift(u32 &out_hi, u32 &out_lo, u32 in_hi, u32 in_lo, unsigned b) {
+        asm ("shf.r.clamp.b32 %0, %2, %3, %4;\n\t"
+             "shr.b32 %1, %2, %4;"
+             : "=r"(out_lo), "=r"(out_hi) : "r"(in_lo), "r"(in_hi), "r"(b));
+    }
+
+    /*
+     * Right shift by b bits; b <= 32.
+     * Source: https://docs.nvidia.com/cuda/parallel-thread-execution/#logic-and-shift-instructions-shf
+     */
+    __device__ __forceinline__
+    void
+    rshift_b32(u64 &out_hi, u64 &out_lo, u64 in_hi, u64 in_lo, unsigned b) {
+        assert(b <= 32);
+        asm ("{\n\t"
+             " .reg .u32 t1;\n\t"
+             " .reg .u32 t2;\n\t"
+             " .reg .u32 t3;\n\t"
+             " .reg .u32 t4;\n\t"
+             " .reg .u32 t5;\n\t"
+             " .reg .u32 t6;\n\t"
+             " .reg .u32 t7;\n\t"
+             " .reg .u32 t8;\n\t"
+             // (t4, t3, t2, t1) = (in_hi, in_lo)
+             " mov.b64 { t1, t2 }, %2;\n\t"
+             " mov.b64 { t3, t4 }, %3;\n\t"
+             " shf.r.clamp.b32 t5, t1, t2, %4;\n\t"
+             " shf.r.clamp.b32 t6, t2, t3, %4;\n\t"
+             " shf.r.clamp.b32 t7, t3, t4, %4;\n\t"
+             " shr.b32 t8, t4, %4;\n\t"
+             " mov.b64 %0, { t5, t6 };\n\t"
+             " mov.b64 %1, { t7, t8 };\n\t"
+             "}"
+             : "=l"(out_lo), "=l"(out_hi) : "l"(in_lo), "l"(in_hi), "r"(b));
+    }
+
+    __device__ __forceinline__
+    void
+    rshift(u64 &out_hi, u64 &out_lo, u64 in_hi, u64 in_lo, unsigned b) {
+        assert(b <= 64);
+        unsigned c = min(b, 32);
+        rshift_b32(out_hi, out_lo, in_hi, in_lo, c);
+        rshift_b32(out_hi, out_lo, out_hi, out_lo, b - c);
+    }
+
     /*
      * Count Leading Zeroes in x.
      */

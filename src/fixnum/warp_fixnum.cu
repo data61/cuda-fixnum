@@ -352,8 +352,8 @@ public:
         add(s, s, cy);
 
         fixnum underflow, overflow;
-        lshift(s, s, 1);  // s *= 2
-        lshift(r, overflow, r, 1);  // r *= 2
+        lshift_small(s, s, 1);  // s *= 2
+        lshift_small(r, overflow, r, 1);  // r *= 2
         add_cy(s, cy, s, overflow); // really a logior, since s was just lshifted.
         assert(digit::is_zero(cy));
 
@@ -378,8 +378,7 @@ public:
     }
 
     __device__ __forceinline__ static void
-    sqr_wide(fixnum &ss, fixnum &rr, fixnum a)
-    {
+    sqr_wide(fixnum &ss, fixnum &rr, fixnum a) {
         // Width below which the general multiplication function is used instead
         // of this one. TODO: 16 is very high; need to work out why we're not
         // doing better on smaller widths.
@@ -476,6 +475,33 @@ public:
         return c + b * digit::BITS;
     }
 
+    __device__
+    static void
+    lshift_small(fixnum &y, fixnum &overflow, fixnum x, int b) {
+        assert(b >= 0);
+        assert(b <= digit::BITS);
+        int L = layout::laneIdx();
+
+        fixnum cy;
+        digit::lshift(y, cy, x, b);
+        overflow = top_digit(cy);
+        overflow = (L == 0) ? overflow : fixnum::zero();
+        cy = layout::shfl_up0(cy, 1);
+        digit::add(y, y, cy); // logior
+    }
+
+    __device__
+    static void
+    lshift_small(fixnum &y, fixnum x, int b) {
+        assert(b >= 0);
+        assert(b <= digit::BITS);
+
+        fixnum cy;
+        digit::lshift(y, cy, x, b);
+        cy = layout::shfl_up0(cy, 1);
+        digit::add(y, y, cy); // logior
+    }
+
     /*
      * Set y to be x shifted by b bits to the left; effectively
      * multiply by 2^b. Return the top b bits of x in overflow.
@@ -499,7 +525,7 @@ public:
         // Hi bits of y[i] (=overflow) become the lo bits of y[(i+1) % width]
         digit::lshift(y, overflow, y, r);
         overflow = layout::rotate_up(overflow, 1);
-        // TODO: This was "y |= overflow"; any advantage to using logor?
+        // TODO: This was "y |= overflow"; any advantage to using logior?
         digit::add(y, y, overflow);
 
         fixnum t;
@@ -513,14 +539,15 @@ public:
         set(y, t, q);
     }
 
-    /*
-     * TODO: Adapt lshift above to not bother calculating overflow.
-     */
     __device__
     static void
     lshift(fixnum &y, fixnum x, int b) {
-        fixnum overflow;
-        lshift(y, overflow, x, b);
+        assert(b >= 0);
+        assert(b <= BITS);
+        int q = b / digit::BITS, r = b % digit::BITS;
+
+        y = layout::shfl_up0(x, q);
+        lshift_small(y, y, r);
     }
 
     /*
