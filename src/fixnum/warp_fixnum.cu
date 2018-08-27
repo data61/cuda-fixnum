@@ -188,23 +188,6 @@ public:
     }
 
     /*
-     * r += a * u where a is interpreted as a single word, and u a
-     * full fixnum. a should be constant across the slot for the
-     * result to make sense.
-     */
-    __device__ static fixnum mad_digit_cy(fixnum &r, digit a, fixnum u) {
-        fixnum hi;
-        digit cy, cy_hi;
-
-        digit::umad(hi, r, a, u, r);
-        cy_hi = top_digit(hi);
-        hi = layout::shfl_up0(hi, 1);
-        add_cy(r, cy, hi, r);
-
-        return cy_hi + cy;
-    }
-
-    /*
      * r = a * u, where a is interpreted as a single word, and u a
      * full fixnum. a should be constant across the slot for the
      * result to make sense.
@@ -232,30 +215,22 @@ public:
      * i.e. the same size as the inputs.
      */
     __device__ static void mul_lo(fixnum &r, fixnum a, fixnum b) {
-        // TODO: This should be smaller, probably uint16_t (smallest
-        // possible for addition).  Strangely, the naive translation to
-        // the smaller size broke; to investigate.
+        // TODO: Implement specific mul_lo function.
         digit cy = digit::zero();
 
         r = zero();
         for (int i = layout::WIDTH - 1; i >= 0; --i) {
             digit aa = layout::shfl(a, i);
 
-            // TODO: See if using umad.wide improves this.
-            digit::mad_hi_cc(r, cy, aa, b, r);
+            digit::mad_hi_cy(r, cy, aa, b, r);
             // TODO: Could use rotate here, which is slightly
             // cheaper than shfl_up0...
             r = layout::shfl_up0(r, 1);
             cy = layout::shfl_up0(cy, 1);
-            digit::mad_lo_cc(r, cy, aa, b, r);
+            digit::mad_lo_cy(r, cy, aa, b, r);
         }
         cy = layout::shfl_up0(cy, 1);
         add(r, r, cy);
-    }
-
-    __device__ static void sqr_lo(fixnum &r, fixnum a) {
-        // TODO: Implement my smarter squaring algo.
-        mul_lo(r, a, a);
     }
 
     /*
@@ -264,69 +239,148 @@ public:
      * r is the "lo half" (see mul_lo above) and s is the
      * corresponding "hi half".
      */
-    __device__ static void mul_wide(fixnum &s, fixnum &r, fixnum a, fixnum b) {
-        // TODO: See if we can get away with a smaller type for cy.
-        digit cy = digit::zero();
+    __device__ static void mul_wide(fixnum &ss, fixnum &rr, fixnum a, fixnum b) {
         int L = layout::laneIdx();
 
-        // TODO: Rewrite this using rotates instead of shuffles;
-        // should be simpler and faster.
+        fixnum r, s;
         r = fixnum::zero();
         s = fixnum::zero();
-        for (int i = layout::WIDTH - 1; i >= 0; --i) {
-            digit aa = layout::shfl(a, i);
-            fixnum t;
+        digit cy = digit::zero();
 
-            // TODO: Review this code: it seems to have more shuffles than
-            // necessary, and besides, why does it not use digit_addmuli?
-            digit::mad_hi_cc(r, cy, aa, b, r);
+        fixnum ai = get(a, 0);
+        digit::mul_lo(s, ai, b);
+        r = L == 0 ? s : r;  // r[0] = s[0];
+        s = layout::shfl_down0(s, 1);
+        digit::mad_hi_cy(s, cy, ai, b, s);
 
-            t = layout::shfl(cy, layout::toplaneIdx);
-            // TODO: Is there a way to avoid this add?  Definitely need to
-            // propagate the carry at least one place, but maybe not more?
-            // Previous (wrong) version: "s = (L == 0) ? s + t : s;"
-            digit_to_fixnum(t);
-            add(s, s, t);
+        for (int i = 1; i < layout::WIDTH; ++i) {
+            fixnum ai = get(a, i);
+            digit::mad_lo_cc(s, ai, b, s);
 
-            // shuffle up hi words
-            s = layout::shfl_up(s, 1);
-            // most sig word of lo words becomes least sig of hi words
-            t = layout::shfl(r, layout::toplaneIdx);
-            s = (L == 0) ? t : s;
+            fixnum s0 = get(s, 0);
+            r = (L == i) ? s0 : r; // r[i] = s[0]
+            s = layout::shfl_down0(s, 1);
 
-            r = layout::shfl_up0(r, 1);
-            cy = layout::shfl_up0(cy, 1);
-            digit::mad_lo_cc(r, cy, aa, b, r);
+            // TODO: Investigate whether deferring this carry resolution until
+            // after the loop improves performance much.
+            digit::addc_cc(s, s, cy);  // add carry from prev digit
+            digit::addc(cy, 0, 0);     // cy = CC.CF
+            digit::mad_hi_cy(s, cy, ai, b, s);
         }
-        // TODO: This carry propgation from r to s is a bit long-winded.
-        // Can we simplify?
-        // NB: cy_hi <= width.  TODO: Justify this explicitly.
-        digit cy_hi = layout::shfl(cy, layout::toplaneIdx);
         cy = layout::shfl_up0(cy, 1);
-        add_cy(r, cy, r, cy);
-        digit::add(cy_hi, cy_hi, cy); // Can't overflow since cy_hi <= width.
-        assert(digit::cmp(cy_hi, cy) >= 0);
-        // TODO: Investigate: replacing the following two lines with
-        // simply "s = (L == 0) ? s + cy_hi : s;" produces no detectible
-        // errors. Can I prove that (MAX_UINT64 - s[0]) < width?
-        digit_to_fixnum(cy_hi);
-        add_cy(s, cy, s, cy_hi);
-        assert(digit::is_zero(cy));
+        add(s, s, cy);
+        rr = r;
+        ss = s;
     }
 
     __device__ static void mul_hi(fixnum &s, fixnum a, fixnum b) {
-        // TODO: implement this properly
+        // TODO: Implement specific mul_hi function.
         fixnum r;
         mul_wide(s, r, a, b);
     }
 
-    __device__ static void sqr_wide(fixnum &s, fixnum &r, fixnum a) {
-        // TODO: Implement my smarter squaring algo.
-        mul_wide(s, r, a, a);
+    /*
+     * Adapt "rediagonalisation" trick described in Figure 4 of Ozturk,
+     * Guilford, Gopal (2013) "Large Integer Squaring on Intel
+     * Architecture Processors".
+     *
+     * TODO: This function is only definitively faster than mul_wide when WIDTH
+     * is 32 (but in that case it's ~50% faster).
+     */
+    __device__ static void
+    sqr_wide_(fixnum &ss, fixnum &rr, fixnum a)
+    {
+        constexpr int W = layout::WIDTH;
+        int L = layout::laneIdx();
+
+        fixnum r, s;
+        r = fixnum::zero();
+        s = fixnum::zero();
+        fixnum diag_lo = fixnum::zero();
+        digit cy = digit::zero();
+
+        for (int i = 0; i < W / 2; ++i) {
+            fixnum a1, a2, s0;
+            int lpi = L + i;
+            // TODO: Explain how on Earth these formulae pick out the correct
+            // terms for the squaring.
+            // NB: Could achieve the same with iterative shuffle's; the expressions
+            // would be clearer, but the shuffles would (presumably) be more expensive.
+            a1 = get(a, lpi < W ? i : lpi - W/2);
+            a2 = get(a, lpi < W ? lpi : W/2 + i);
+
+            assert(L != 0 || digit::cmp(a1,a2)==0); // a1 = a2 when L == 0
+
+            fixnum hi, lo;
+            digit::mul_wide(hi, lo, a1, a2);
+
+            // TODO: These two (almost identical) blocks cause lots of pipeline
+            // stalls; need to find a way to reduce their data dependencies.
+            digit::add_cyio(s, cy, s, lo);
+            lo = get(lo, 0);
+            diag_lo = (L == 2*i) ? lo : diag_lo;
+            s0 = get(s, 0);
+            r = (L == 2*i) ? s0 : r; // r[2i] = s[0]
+            s = layout::shfl_down0(s, 1);
+
+            digit::add_cyio(s, cy, s, hi);
+            hi = get(hi, 0);
+            diag_lo = (L == 2*i + 1) ? hi : diag_lo;
+            s0 = get(s, 0);
+            r = (L == 2*i + 1) ? s0 : r; // r[2i+1] = s[0]
+            s = layout::shfl_down0(s, 1);
+        }
+
+        // TODO: All these carries and borrows into s should be accumulated into
+        // one call.
+        add(s, s, cy);
+
+        fixnum overflow;
+        lshift_small(s, s, 1);  // s *= 2
+        lshift_small(r, overflow, r, 1);  // r *= 2
+        add_cy(s, cy, s, overflow); // really a logior, since s was just lshifted.
+        assert(digit::is_zero(cy));
+
+        // Doubling r above means we've doubled the diagonal terms, though they
+        // shouldn't be. Compensate by subtracting a copy of them here.
+        digit br;
+        sub_br(r, br, r, diag_lo);
+        br = (L == 0) ? br : digit::zero();
+        sub(s, s, br);
+
+        // TODO: This is wasteful, since the odd lane lo's are discarded as are
+        // the even lane hi's.
+        fixnum lo, hi, ai = get(a, W/2 + L/2);
+        digit::mul_lo(lo, ai, ai);
+        digit::mul_hi(hi, ai, ai);
+        fixnum diag_hi = L & 1 ? hi : lo;
+
+        add(s, s, diag_hi);
+
+        rr = r;
+        ss = s;
+    }
+
+    __device__ __forceinline__ static void
+    sqr_wide(fixnum &ss, fixnum &rr, fixnum a) {
+        // Width below which the general multiplication function is used instead
+        // of this one. TODO: 16 is very high; need to work out why we're not
+        // doing better on smaller widths.
+        constexpr int SQUARING_WIDTH_THRESHOLD = 16;
+        if (layout::WIDTH < SQUARING_WIDTH_THRESHOLD)
+            mul_wide(ss, rr, a, a);
+        else
+            sqr_wide_(ss, rr, a);
+    }
+
+    __device__ static void sqr_lo(fixnum &r, fixnum a) {
+        // TODO: Implement specific sqr_lo function.
+        fixnum s;
+        sqr_wide(s, r, a);
     }
 
     __device__ static void sqr_hi(fixnum &s, fixnum a) {
-        // TODO: implement this properly
+        // TODO: Implement specific sqr_hi function.
         fixnum r;
         sqr_wide(s, r, a);
     }
@@ -405,6 +459,33 @@ public:
         return c + b * digit::BITS;
     }
 
+    __device__
+    static void
+    lshift_small(fixnum &y, fixnum &overflow, fixnum x, int b) {
+        assert(b >= 0);
+        assert(b <= digit::BITS);
+        int L = layout::laneIdx();
+
+        fixnum cy;
+        digit::lshift(y, cy, x, b);
+        overflow = top_digit(cy);
+        overflow = (L == 0) ? overflow : fixnum::zero();
+        cy = layout::shfl_up0(cy, 1);
+        digit::add(y, y, cy); // logior
+    }
+
+    __device__
+    static void
+    lshift_small(fixnum &y, fixnum x, int b) {
+        assert(b >= 0);
+        assert(b <= digit::BITS);
+
+        fixnum cy;
+        digit::lshift(y, cy, x, b);
+        cy = layout::shfl_up0(cy, 1);
+        digit::add(y, y, cy); // logior
+    }
+
     /*
      * Set y to be x shifted by b bits to the left; effectively
      * multiply by 2^b. Return the top b bits of x in overflow.
@@ -428,7 +509,7 @@ public:
         // Hi bits of y[i] (=overflow) become the lo bits of y[(i+1) % width]
         digit::lshift(y, overflow, y, r);
         overflow = layout::rotate_up(overflow, 1);
-        // TODO: This was "y |= overflow"; any advantage to using logor?
+        // TODO: This was "y |= overflow"; any advantage to using logior?
         digit::add(y, y, overflow);
 
         fixnum t;
@@ -442,14 +523,15 @@ public:
         set(y, t, q);
     }
 
-    /*
-     * TODO: Adapt lshift above to not bother calculating overflow.
-     */
     __device__
     static void
     lshift(fixnum &y, fixnum x, int b) {
-        fixnum overflow;
-        lshift(y, overflow, x, b);
+        assert(b >= 0);
+        assert(b <= BITS);
+        int q = b / digit::BITS, r = b % digit::BITS;
+
+        y = layout::shfl_up0(x, q);
+        lshift_small(y, y, r);
     }
 
     /*

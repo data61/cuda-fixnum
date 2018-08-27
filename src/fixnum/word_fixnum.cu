@@ -64,11 +64,40 @@ public:
         s = a + b;
     }
 
+    // TODO: this function does not follow the convention of later '*_cy'
+    // functions of accumulating the carry into cy.
     __device__ __forceinline__
     static void
     add_cy(fixnum &s, digit &cy, fixnum a, fixnum b) {
         s = a + b;
         cy = s < a;
+    }
+
+    __device__ __forceinline__
+    static void
+    add_cyio(fixnum &s, digit &cy, fixnum a, fixnum b) {
+        s = a + cy;
+        cy = s < a;
+        s += b;
+        cy |= s < b;
+    }
+
+    __device__ __forceinline__
+    static void
+    add_cc(fixnum &s, fixnum a, fixnum b) {
+        internal::add_cc(s, a, b);
+    }
+
+    __device__ __forceinline__
+    static void
+    addc(fixnum &s, fixnum a, fixnum b) {
+        internal::addc(s, a, b);
+    }
+
+    __device__ __forceinline__
+    static void
+    addc_cc(fixnum &s, fixnum a, fixnum b) {
+        internal::addc_cc(s, a, b);
     }
 
     __device__ __forceinline__
@@ -133,8 +162,9 @@ public:
     // as above but increment cy by the mad carry
     __device__ __forceinline__
     static void
-    mad_lo_cc(fixnum &lo, fixnum &cy, fixnum a, fixnum b, fixnum c) {
-        internal::mad_lo_cc(lo, cy, a, b, c);
+    mad_lo_cy(fixnum &lo, fixnum &cy, fixnum a, fixnum b, fixnum c) {
+        internal::mad_lo_cc(lo, a, b, c);
+        internal::addc(cy, cy, 0);
     }
 
     __device__ __forceinline__
@@ -146,8 +176,16 @@ public:
     // as above but increment cy by the mad carry
     __device__ __forceinline__
     static void
-    mad_hi_cc(fixnum &hi, fixnum &cy, fixnum a, fixnum b, fixnum c) {
-        internal::mad_hi_cc(hi, cy, a, b, c);
+    mad_hi_cy(fixnum &hi, fixnum &cy, fixnum a, fixnum b, fixnum c) {
+        internal::mad_hi_cc(hi, a, b, c);
+        internal::addc(cy, cy, 0);
+    }
+
+    // TODO: There are weird and only included for mul_wide
+    __device__ __forceinline__
+    static void
+    mad_lo_cc(fixnum &lo, fixnum a, fixnum b, fixnum c) {
+        internal::mad_lo_cc(lo, a, b, c);
     }
 
     // Returns the reciprocal for d.
@@ -252,8 +290,7 @@ public:
     __device__ __forceinline__
     static void
     lshift(fixnum &z, fixnum &overflow, fixnum x, unsigned b) {
-        overflow = x >> (BITS - b);
-        z = x << b;
+        internal::lshift(overflow, z, 0, x, b);
     }
 
     __device__ __forceinline__
@@ -265,8 +302,7 @@ public:
     __device__ __forceinline__
     static void
     rshift(fixnum &z, fixnum &underflow, fixnum x, unsigned b) {
-        underflow = x & (((fixnum)1 << b) - 1);
-        z = x >> b;
+        internal::rshift(z, underflow, x, 0, b);
     }
 
     /*

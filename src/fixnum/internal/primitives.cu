@@ -7,6 +7,54 @@ namespace internal {
     typedef std::uint32_t u32;
     typedef std::uint64_t u64;
 
+    __device__ __forceinline__
+    void
+    addc(u32 &s, u32 a, u32 b) {
+        asm ("addc.u32 %0, %1, %2;"
+             : "=r"(s)
+             : "r"(a), "r" (b));
+    }
+
+    __device__ __forceinline__
+    void
+    add_cc(u32 &s, u32 a, u32 b) {
+        asm ("add.cc.u32 %0, %1, %2;"
+             : "=r"(s)
+             : "r"(a), "r" (b));
+    }
+
+    __device__ __forceinline__
+    void
+    addc_cc(u32 &s, u32 a, u32 b) {
+        asm ("addc.cc.u32 %0, %1, %2;"
+             : "=r"(s)
+             : "r"(a), "r" (b));
+    }
+
+    __device__ __forceinline__
+    void
+    addc(u64 &s, u64 a, u64 b) {
+        asm ("addc.u64 %0, %1, %2;"
+             : "=l"(s)
+             : "l"(a), "l" (b));
+    }
+
+    __device__ __forceinline__
+    void
+    add_cc(u64 &s, u64 a, u64 b) {
+        asm ("add.cc.u64 %0, %1, %2;"
+             : "=l"(s)
+             : "l"(a), "l" (b));
+    }
+
+    __device__ __forceinline__
+    void
+    addc_cc(u64 &s, u64 a, u64 b) {
+        asm ("addc.cc.u64 %0, %1, %2;"
+             : "=l"(s)
+             : "l"(a), "l" (b));
+    }
+
     /*
      * hi * 2^n + lo = a * b
      */
@@ -40,7 +88,7 @@ namespace internal {
         asm ("{\n\t"
              " .reg .u64 tmp;\n\t"
              " mul.wide.u32 tmp, %2, %3;\n\t"
-             " mov.b64 { %0, %1 }, tmp;\n\t"
+             " mov.b64 { %1, %0 }, tmp;\n\t"
              "}"
              : "=r"(hi), "=r"(lo)
              : "r"(a), "r"(b));
@@ -64,7 +112,7 @@ namespace internal {
         asm ("{\n\t"
              " .reg .u64 tmp;\n\t"
              " mad.wide.u32 tmp, %2, %3, %4;\n\t"
-             " mov.b64 { %0, %1 }, tmp;\n\t"
+             " mov.b64 { %1, %0 }, tmp;\n\t"
              "}"
              : "=r"(hi), "=r"(lo)
              : "r"(a), "r"(b), "r"(c));
@@ -100,19 +148,33 @@ namespace internal {
     // as above but with carry in cy
     __device__ __forceinline__
     void
-    mad_lo_cc(u32 &lo, u32 &cy, u32 a, u32 b, u32 c) {
-        asm ("mad.lo.cc.u32 %0, %2, %3, %4;\n\t"
-             "addc.u32 %1, %1, 0;"
-             : "=r"(lo), "+r"(cy)
+    mad_lo_cc(u32 &lo, u32 a, u32 b, u32 c) {
+        asm ("mad.lo.cc.u32 %0, %1, %2, %3;"
+             : "=r"(lo)
              : "r"(a), "r" (b), "r"(c));
     }
 
     __device__ __forceinline__
     void
-    mad_lo_cc(u64 &lo, u64 &cy, u64 a, u64 b, u64 c) {
-        asm ("mad.lo.cc.u64 %0, %2, %3, %4;\n\t"
-             "addc.u64 %1, %1, 0;"
-             : "=l"(lo), "+l"(cy)
+    mad_lo_cc(u64 &lo, u64 a, u64 b, u64 c) {
+        asm ("mad.lo.cc.u64 %0, %1, %2, %3;"
+             : "=l"(lo)
+             : "l"(a), "l" (b), "l"(c));
+    }
+
+    __device__ __forceinline__
+    void
+    madc_lo_cc(u32 &lo, u32 a, u32 b, u32 c) {
+        asm ("madc.lo.cc.u32 %0, %1, %2, %3;"
+             : "=r"(lo)
+             : "r"(a), "r" (b), "r"(c));
+    }
+
+    __device__ __forceinline__
+    void
+    madc_lo_cc(u64 &lo, u64 a, u64 b, u64 c) {
+        asm ("madc.lo.cc.u64 %0, %1, %2, %3;"
+             : "=l"(lo)
              : "l"(a), "l" (b), "l"(c));
     }
 
@@ -134,21 +196,130 @@ namespace internal {
 
     __device__ __forceinline__
     void
-    mad_hi_cc(u32 &hi, u32 &cy, u32 a, u32 b, u32 c) {
-        asm ("mad.hi.cc.u32 %0, %2, %3, %4;\n\t"
-             "addc.u32 %1, %1, 0;"
-             : "=r"(hi), "+r"(cy)
+    mad_hi_cc(u32 &hi, u32 a, u32 b, u32 c) {
+        asm ("mad.hi.cc.u32 %0, %1, %2, %3;"
+             : "=r"(hi)
              : "r"(a), "r" (b), "r"(c));
     }
 
+    __device__ __forceinline__
+    void
+    mad_hi_cc(u64 &hi, u64 a, u64 b, u64 c) {
+        asm ("mad.hi.cc.u64 %0, %1, %2, %3;"
+             : "=l"(hi)
+             : "l"(a), "l" (b), "l"(c));
+    }
 
     __device__ __forceinline__
     void
-    mad_hi_cc(u64 &hi, u64 &cy, u64 a, u64 b, u64 c) {
-        asm ("mad.hi.cc.u64 %0, %2, %3, %4;\n\t"
-             "addc.u64 %1, %1, 0;"
-             : "=l"(hi), "+l"(cy)
+    madc_hi_cc(u32 &hi, u32 a, u32 b, u32 c) {
+        asm ("madc.hi.cc.u32 %0, %1, %2, %3;"
+             : "=r"(hi)
+             : "r"(a), "r" (b), "r"(c));
+    }
+
+    __device__ __forceinline__
+    void
+    madc_hi_cc(u64 &hi, u64 a, u64 b, u64 c) {
+        asm ("madc.hi.cc.u64 %0, %1, %2, %3;\n\t"
+             : "=l"(hi)
              : "l"(a), "l" (b), "l"(c));
+    }
+
+    // Source: https://docs.nvidia.com/cuda/parallel-thread-execution/#logic-and-shift-instructions-shf
+    __device__ __forceinline__
+    void
+    lshift(u32 &out_hi, u32 &out_lo, u32 in_hi, u32 in_lo, unsigned b) {
+        asm ("shf.l.clamp.b32 %1, %2, %3, %4;\n\t"
+             "shl.b32 %0, %2, %4;"
+             : "=r"(out_lo), "=r"(out_hi) : "r"(in_lo), "r"(in_hi), "r"(b));
+    }
+
+    /*
+     * Left shift by b bits; b <= 32.
+     * Source: https://docs.nvidia.com/cuda/parallel-thread-execution/#logic-and-shift-instructions-shf
+     */
+    __device__ __forceinline__
+    void
+    lshift_b32(u64 &out_hi, u64 &out_lo, u64 in_hi, u64 in_lo, unsigned b) {
+        assert(b <= 32);
+        asm ("{\n\t"
+             " .reg .u32 t1;\n\t"
+             " .reg .u32 t2;\n\t"
+             " .reg .u32 t3;\n\t"
+             " .reg .u32 t4;\n\t"
+             " .reg .u32 t5;\n\t"
+             " .reg .u32 t6;\n\t"
+             " .reg .u32 t7;\n\t"
+             " .reg .u32 t8;\n\t"
+             // (t4, t3, t2, t1) = (in_hi, in_lo)
+             " mov.b64 { t3, t4 }, %3;\n\t"
+             " mov.b64 { t1, t2 }, %2;\n\t"
+             " shf.l.clamp.b32 t8, t3, t4, %4;\n\t"
+             " shf.l.clamp.b32 t7, t2, t3, %4;\n\t"
+             " shf.l.clamp.b32 t6, t1, t2, %4;\n\t"
+             " shl.b32 t5, t1, %4;\n\t"
+             " mov.b64 %1, { t7, t8 };\n\t"
+             " mov.b64 %0, { t5, t6 };\n\t"
+             "}"
+             : "=l"(out_lo), "=l"(out_hi) : "l"(in_lo), "l"(in_hi), "r"(b));
+    }
+
+    __device__ __forceinline__
+    void
+    lshift(u64 &out_hi, u64 &out_lo, u64 in_hi, u64 in_lo, unsigned b) {
+        assert(b <= 64);
+        unsigned c = min(b, 32);
+        lshift_b32(out_hi, out_lo, in_hi, in_lo, c);
+        lshift_b32(out_hi, out_lo, out_hi, out_lo, b - c);
+    }
+
+    // Source: https://docs.nvidia.com/cuda/parallel-thread-execution/#logic-and-shift-instructions-shf
+    __device__ __forceinline__
+    void
+    rshift(u32 &out_hi, u32 &out_lo, u32 in_hi, u32 in_lo, unsigned b) {
+        asm ("shf.r.clamp.b32 %0, %2, %3, %4;\n\t"
+             "shr.b32 %1, %2, %4;"
+             : "=r"(out_lo), "=r"(out_hi) : "r"(in_lo), "r"(in_hi), "r"(b));
+    }
+
+    /*
+     * Right shift by b bits; b <= 32.
+     * Source: https://docs.nvidia.com/cuda/parallel-thread-execution/#logic-and-shift-instructions-shf
+     */
+    __device__ __forceinline__
+    void
+    rshift_b32(u64 &out_hi, u64 &out_lo, u64 in_hi, u64 in_lo, unsigned b) {
+        assert(b <= 32);
+        asm ("{\n\t"
+             " .reg .u32 t1;\n\t"
+             " .reg .u32 t2;\n\t"
+             " .reg .u32 t3;\n\t"
+             " .reg .u32 t4;\n\t"
+             " .reg .u32 t5;\n\t"
+             " .reg .u32 t6;\n\t"
+             " .reg .u32 t7;\n\t"
+             " .reg .u32 t8;\n\t"
+             // (t4, t3, t2, t1) = (in_hi, in_lo)
+             " mov.b64 { t1, t2 }, %2;\n\t"
+             " mov.b64 { t3, t4 }, %3;\n\t"
+             " shf.r.clamp.b32 t5, t1, t2, %4;\n\t"
+             " shf.r.clamp.b32 t6, t2, t3, %4;\n\t"
+             " shf.r.clamp.b32 t7, t3, t4, %4;\n\t"
+             " shr.b32 t8, t4, %4;\n\t"
+             " mov.b64 %0, { t5, t6 };\n\t"
+             " mov.b64 %1, { t7, t8 };\n\t"
+             "}"
+             : "=l"(out_lo), "=l"(out_hi) : "l"(in_lo), "l"(in_hi), "r"(b));
+    }
+
+    __device__ __forceinline__
+    void
+    rshift(u64 &out_hi, u64 &out_lo, u64 in_hi, u64 in_lo, unsigned b) {
+        assert(b <= 64);
+        unsigned c = min(b, 32);
+        rshift_b32(out_hi, out_lo, in_hi, in_lo, c);
+        rshift_b32(out_hi, out_lo, out_hi, out_lo, b - c);
     }
 
     /*

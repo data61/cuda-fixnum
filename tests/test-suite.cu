@@ -27,34 +27,23 @@ void die_if(bool p, const string &msg) {
     }
 }
 
-::testing::AssertionResult
+int
 arrays_are_equal(
     const uint8_t *expected, size_t expected_len,
     const uint8_t *actual, size_t actual_len)
 {
-    if (expected_len > actual_len) {
-        return ::testing::AssertionFailure()
-            << "arrays don't have the same length";
-    }
+    if (expected_len > actual_len)
+        return actual_len;
     size_t i;
     for (i = 0; i < expected_len; ++i) {
-        if (expected[i] != actual[i]) {
-            return ::testing::AssertionFailure()
-                << "arrays differ: expected[" << i << "] = "
-                << static_cast<int>(expected[i])
-                << " but actual[" << i << "] = "
-                << static_cast<int>(actual[i]);
-        }
+        if (expected[i] != actual[i])
+            return i;
     }
     for (; i < actual_len; ++i) {
-        if (actual[i] != 0) {
-            return ::testing::AssertionFailure()
-                << "arrays differ: expected[" << i << "] = 0"
-                << " but actual[" << i << "] = "
-                << static_cast<int>(actual[i]);
-        }
+        if (actual[i] != 0)
+            return i;
     }
-    return ::testing::AssertionSuccess();
+    return -1;
 }
 
 
@@ -150,6 +139,7 @@ void check_result(
     // point to copying them into buf.
     byte_array buf(nbytes);
 
+    int arg_idx = 0;
     for (auto arg : args) {
         auto buf_iter = buf.begin();
         for (uint32_t i = 0; i < nvecs; ++i) {
@@ -157,7 +147,9 @@ void check_result(
             buf_iter += fixnum_bytes*vec_len;
             tcase += skip;
         }
-        EXPECT_TRUE(arrays_are_equal(buf.data(), nbytes, arg->get_ptr(), nbytes));
+        int r = arrays_are_equal(buf.data(), nbytes, arg->get_ptr(), nbytes);
+        EXPECT_TRUE(r < 0) << "failed near byte " << r << " in argument " << arg_idx;
+        ++arg_idx;
     }
 }
 
@@ -322,6 +314,93 @@ TYPED_TEST(TypedPrimitives, mul_wide) {
         check_result(tcase, vec_len, {los, his});
         delete ys;
     }
+    delete his;
+    delete los;
+    delete xs;
+}
+
+template< typename fixnum >
+struct sqr_lo {
+    __device__ void operator()(fixnum &r, fixnum a) {
+        fixnum rr;
+        fixnum::sqr_lo(rr, a);
+        r = rr;
+    }
+};
+
+TYPED_TEST(TypedPrimitives, sqr_lo) {
+    typedef typename TestFixture::fixnum fixnum;
+    typedef fixnum_array<fixnum> fixnum_array;
+
+    fixnum_array *res, *xs;
+    vector<byte_array> tcases;
+
+    read_tcases(tcases, xs, "tests/sqr_wide", 1);
+    int vec_len = xs->length();
+    res = fixnum_array::create(vec_len);
+
+    fixnum_array::template map<sqr_lo>(res, xs);
+    auto tcase = tcases.begin();
+    check_result(tcase, vec_len, {res}, 2);
+
+    delete res;
+    delete xs;
+}
+
+template< typename fixnum >
+struct sqr_hi {
+    __device__ void operator()(fixnum &r, fixnum a) {
+        fixnum rr;
+        fixnum::sqr_hi(rr, a);
+        r = rr;
+    }
+};
+
+TYPED_TEST(TypedPrimitives, sqr_hi) {
+    typedef typename TestFixture::fixnum fixnum;
+    typedef fixnum_array<fixnum> fixnum_array;
+
+    fixnum_array *res, *xs;
+    vector<byte_array> tcases;
+
+    read_tcases(tcases, xs, "tests/sqr_wide", 1);
+    int vec_len = xs->length();
+    res = fixnum_array::create(vec_len);
+
+    fixnum_array::template map<sqr_hi>(res, xs);
+    auto tcase = tcases.begin() + 1;
+    check_result(tcase, vec_len, {res}, 2);
+
+    delete res;
+    delete xs;
+}
+
+template< typename fixnum >
+struct sqr_wide {
+    __device__ void operator()(fixnum &s, fixnum &r, fixnum a) {
+        fixnum rr, ss;
+        fixnum::sqr_wide(ss, rr, a);
+        s = ss;
+        r = rr;
+    }
+};
+
+TYPED_TEST(TypedPrimitives, sqr_wide) {
+    typedef typename TestFixture::fixnum fixnum;
+    typedef fixnum_array<fixnum> fixnum_array;
+
+    fixnum_array *his, *los, *xs;
+    vector<byte_array> tcases;
+
+    read_tcases(tcases, xs, "tests/sqr_wide", 1);
+    int vec_len = xs->length();
+    his = fixnum_array::create(vec_len);
+    los = fixnum_array::create(vec_len);
+
+    fixnum_array::template map<sqr_wide>(his, los, xs);
+    auto tcase = tcases.begin();
+    check_result(tcase, vec_len, {los, his});
+
     delete his;
     delete los;
     delete xs;

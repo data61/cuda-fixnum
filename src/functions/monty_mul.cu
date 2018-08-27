@@ -50,11 +50,11 @@ private:
 
     // Modulus for Monty arithmetic
     fixnum mod;
-    // R_mod = 2^FIXNUM_BITS % mod
+    // R_mod = 2^fixnum::BITS % mod
     fixnum R_mod;
     // Rsqr = R^2 % mod
     fixnum Rsqr_mod;
-    // inv_mod * mod = -1 % 2^WORD_BITS.
+    // inv_mod * mod = -1 % 2^digit::BITS.
     digit  inv_mod;
 
     // TODO: We save this after using it in the constructor; work out
@@ -131,16 +131,16 @@ monty_mul<fixnum>::operator()(fixnum &z, fixnum x, fixnum y) const
 
         digit::mad_lo(u, z0, inv_mod, tmpi);
 
-        digit::mad_lo_cc(z, cy, mod, u, z);
-        digit::mad_lo_cc(z, cy, y, xi, z);
+        digit::mad_lo_cy(z, cy, mod, u, z);
+        digit::mad_lo_cy(z, cy, y, xi, z);
 
         assert(L || digit::is_zero(z));  // z[0] must be 0
         z = layout::shfl_down0(z, 1); // Shift right one word
 
         digit::add_cy(z, cy, z, cy);
 
-        digit::mad_hi_cc(z, cy, mod, u, z);
-        digit::mad_hi_cc(z, cy, y, xi, z);
+        digit::mad_hi_cy(z, cy, mod, u, z);
+        digit::mad_hi_cy(z, cy, y, xi, z);
     }
     // Resolve carries
     digit msw = fixnum::top_digit(cy);

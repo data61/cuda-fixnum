@@ -12,7 +12,9 @@ def write_vector(dest, elt_sz, v):
 
 def mktests(op, xs, nargs, bits):
     # FIXME: Refactor this.
-    if nargs == 2:
+    if nargs == 1:
+        yield zip(*[op(x, bits) for x in xs])
+    elif nargs == 2:
         ys = deque(xs)
         for i in range(len(xs)):
             yield zip(*[op(x, y, bits) for x, y in zip(xs, ys)])
@@ -68,6 +70,9 @@ def sub_br(x, y, bits):
 
 def mul_wide(x, y, bits):
     return [(x * y) & ((1<<bits) - 1), (x * y) >> bits]
+
+def sqr_wide(x, bits):
+    return [(x * x) & ((1<<bits) - 1), (x * x) >> bits]
 
 def modexp(x, y, z, bits):
     # FIXME: Handle these cases properly!
@@ -137,6 +142,7 @@ def generate_tests(nbytes, tests):
         'add_cy': (add_cy, xs, 2, 2, bits),
         'sub_br': (sub_br, xs, 2, 2, bits),
         'mul_wide': (mul_wide, xs, 2, 2, bits),
+        'sqr_wide': (sqr_wide, xs, 1, 2, bits),
         'modexp': (modexp, xs, 3, 1, bits),
         'paillier_encrypt' : (paillier_encrypt, ps, 4, 1, bits)
     }
