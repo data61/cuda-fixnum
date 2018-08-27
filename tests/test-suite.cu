@@ -17,6 +17,7 @@
 #include "functions/paillier_decrypt.cu"
 
 using namespace std;
+using namespace cuFIXNUM;
 
 typedef vector<uint8_t> byte_array;
 

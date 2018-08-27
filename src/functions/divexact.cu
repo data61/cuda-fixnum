@@ -2,6 +2,8 @@
 
 #include "functions/modinv.cu"
 
+namespace cuFIXNUM {
+
 template< typename fixnum >
 class divexact {
 public:
@@ -62,3 +64,5 @@ private:
     // all zeros.
     fixnum bi;
 };
+
+} // End namespace cuFIXNUM

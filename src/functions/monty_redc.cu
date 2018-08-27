@@ -1,5 +1,7 @@
 #pragma once
 
+namespace cuFIXNUM {
+
 template< typename fixnum >
 class monty_redc {
     // Modulus for Monty arithmetic
@@ -43,3 +45,5 @@ public:
             sub(r, r, mod);
     }
 };
+
+} // End namespace cuFIXNUM

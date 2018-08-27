@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <cstdlib>
 
+namespace cuFIXNUM {
+
 /*
  * Convenience wrappers around some CUDA library functions
  */
@@ -43,3 +45,6 @@ cuda_print_errmsg(cudaError err, const char *msg, const char *file, const int li
     cuda_check(cudaMemset(dest, val, size), "memset on device")
 #define cuda_device_synchronize() \
     cuda_check(cudaDeviceSynchronize(), "device synchronize")
+
+
+} // End namespace cuFIXNUM

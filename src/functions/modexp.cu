@@ -3,6 +3,8 @@
 #include "functions/internal/modexp_impl.cu"
 #include "functions/monty_mul.cu"
 
+namespace cuFIXNUM {
+
 template< typename fixnum >
 class modexp {
     typedef typename fixnum::digit digit;
@@ -186,3 +188,5 @@ modexp<fixnum>::operator()(fixnum &z, fixnum x) const
     }
     monty.from_monty(z, z);
 }
+
+} // End namespace cuFIXNUM

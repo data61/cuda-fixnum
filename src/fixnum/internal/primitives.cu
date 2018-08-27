@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <type_traits>
 
+namespace cuFIXNUM {
+
 namespace internal {
     typedef std::uint32_t u32;
     typedef std::uint64_t u64;
@@ -795,4 +797,7 @@ namespace internal {
     ceilquo(T &q, T n, T d) {
         q = (n + d - 1) / d;
     }
-}
+
+} // End namespace internal
+
+} // End namespace cuFIXNUM

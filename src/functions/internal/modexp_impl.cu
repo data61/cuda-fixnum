@@ -1,5 +1,7 @@
 #pragma once
 
+namespace cuFIXNUM {
+
 namespace internal
 {
     /*
@@ -102,4 +104,7 @@ namespace internal
             bits > 2048 ? 7 :
             BYTES_TO_CLNW_WINDOW_SIZE_TABLE[(bits / 8) / 16];
     }
-}
+
+} // End namespace internal
+
+} // End namespace cuFIXNUM

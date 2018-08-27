@@ -3,6 +3,8 @@
 #include <iostream>
 #include <cstdint>
 
+namespace cuFIXNUM {
+
 // TODO: Copy over functionality and documentation from IntmodVector.
 template< typename fixnum >
 class fixnum_array {
@@ -45,5 +47,7 @@ private:
 template< typename fixnum >
 std::ostream &
 operator<<(std::ostream &os, const fixnum_array<fixnum> *fn_arr);
+
+} // End namespace cuFIXNUM
 
 #include "fixnum_array.cu"

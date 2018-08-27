@@ -7,6 +7,7 @@
 #include "functions/modexp.cu"
 
 using namespace std;
+using namespace cuFIXNUM;
 
 template< typename fixnum >
 struct mul_lo {

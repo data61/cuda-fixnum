@@ -3,6 +3,8 @@
 #include "functions/quorem_preinv.cu"
 #include "functions/multi_modexp.cu"
 
+namespace cuFIXNUM {
+
 template< typename fixnum >
 class paillier_encrypt {
 public:
@@ -40,3 +42,4 @@ private:
     }
 };
 
+} // End namespace cuFIXNUM

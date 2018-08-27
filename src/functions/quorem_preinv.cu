@@ -2,6 +2,8 @@
 
 #include "functions/quorem.cu"
 
+namespace cuFIXNUM {
+
 /*
  * Quotient and remainder via Barrett reduction.
  *
@@ -157,3 +159,5 @@ quorem_preinv<fixnum>::operator()(
     fixnum::rshift(r, lo_bits, r, lz);
     assert(fixnum::is_zero(lo_bits));
 }
+
+} // End namespace cuFIXNUM

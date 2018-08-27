@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+namespace cuFIXNUM {
+
 // For some reason the warpSize value provided by CUDA is not
 // considered a constant value, so cannot be used in constexprs or
 // template parameters or static_asserts. Hence we must use WARPSIZE
@@ -202,3 +204,5 @@ struct slot_layout
 private:
     slot_layout();
 };
+
+} // End namespace cuFIXNUM

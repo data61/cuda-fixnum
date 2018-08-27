@@ -3,6 +3,8 @@
 #include "functions/internal/modexp_impl.cu"
 #include "functions/monty_mul.cu"
 
+namespace cuFIXNUM {
+
 template<
     typename fixnum,
     int WINDOW_SIZE = internal::bytes_to_k_ary_window_size(fixnum::BYTES) >
@@ -102,3 +104,5 @@ multi_modexp<fixnum, WINDOW_SIZE>::operator()(fixnum &z, fixnum x, fixnum e) con
     }
     monty.from_monty(z, z);
 }
+
+} // End namespace cuFIXNUM

@@ -5,6 +5,7 @@
 #include "functions/chinese.cu"
 #include "functions/multi_modexp.cu"
 
+namespace cuFIXNUM {
 
 template< typename fixnum >
 class paillier_decrypt_mod;
@@ -163,3 +164,5 @@ paillier_decrypt_mod<fixnum>::operator()(fixnum &mp, fixnum c_hi, fixnum c_lo) c
     assert(fixnum::is_zero(hi));
     mod_p(mp, hi, lo);
 }
+
+} // End namespace cuFIXNUM

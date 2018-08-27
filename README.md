@@ -14,6 +14,8 @@ To get a feel for what it's like to use the library, let's consider a simple exa
 #include "functions/quorem_preinv.cu"
 #include "functions/modexp.cu"
 
+using namespace cuFIXNUM;
+
 template< typename fixnum >
 class paillier_encrypt {
     fixnum n;                     // public key
@@ -65,6 +67,8 @@ A few features will be common to most user-defined functions such as the one abo
 
 Although it is not (yet) the focus of this project to help optimise host-device communication, the [`fixnum_array`](cuda-fixnum/src/array/fixnum_array.h) facility is provided to make it easy to apply user-defined functions to data originating in the host. Using `fixnum_array` will often look something like this:
 ```C++
+using namespace cuFIXNUM;
+
 // In this case we need to wrap paillier_encrypt above to read the 
 // public key from memory and pass it to the constructor.
 __device__ uint8_t public_key[] = ...; // initialised earlier
