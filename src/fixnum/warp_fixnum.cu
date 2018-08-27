@@ -188,23 +188,6 @@ public:
     }
 
     /*
-     * r += a * u where a is interpreted as a single word, and u a
-     * full fixnum. a should be constant across the slot for the
-     * result to make sense.
-     */
-    __device__ static fixnum mad_digit_cy(fixnum &r, digit a, fixnum u) {
-        fixnum hi;
-        digit cy, cy_hi;
-
-        digit::umad(hi, r, a, u, r);
-        cy_hi = top_digit(hi);
-        hi = layout::shfl_up0(hi, 1);
-        add_cy(r, cy, hi, r);
-
-        return cy_hi + cy;
-    }
-
-    /*
      * r = a * u, where a is interpreted as a single word, and u a
      * full fixnum. a should be constant across the slot for the
      * result to make sense.
