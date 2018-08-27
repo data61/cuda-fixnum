@@ -3,6 +3,8 @@
 #include "functions/quorem_preinv.cu"
 #include "functions/multi_modexp.cu"
 
+namespace cuFIXNUM {
+
 template< typename fixnum >
 class chinese {
 public:
@@ -101,3 +103,5 @@ chinese<fixnum>::operator()(fixnum &m, fixnum mp, fixnum mq) const
     //digit_add(m, mp, t, width);
     fixnum::add(m, mp, t);
 }
+
+} // End namespace cuFIXNUM

@@ -2,6 +2,8 @@
 
 #include "fixnum/internal/primitives.cu"
 
+namespace cuFIXNUM {
+
 template< typename T >
 class word_fixnum {
 public:
@@ -348,3 +350,5 @@ public:
 
 typedef word_fixnum<std::uint32_t> u32_fixnum;
 typedef word_fixnum<std::uint64_t> u64_fixnum;
+
+} // End namespace cuFIXNUM

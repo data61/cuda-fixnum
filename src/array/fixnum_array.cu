@@ -9,6 +9,8 @@
 #include "util/cuda_wrap.h"
 #include "fixnum_array.h"
 
+namespace cuFIXNUM {
+
 // TODO: The only device function in this file is the dispatch kernel
 // mechanism, which could arguably be placed elsewhere, thereby
 // allowing this file to be compiled completely for the host.
@@ -299,3 +301,5 @@ fixnum_array<fixnum>::map(Args... args) {
         cuda_device_synchronize();
     }
 }
+
+} // End namespace cuFIXNUM

@@ -1,5 +1,7 @@
 #pragma once
 
+namespace cuFIXNUM {
+
 /*
  * Quotient and remainder via long-division.
  *
@@ -249,3 +251,5 @@ quorem<fixnum>::operator()(
     fixnum::rshift(r, tmp, A, k);
     assert(fixnum::is_zero(tmp)); // Above division should be exact.
 }
+
+} // End namespace cuFIXNUM

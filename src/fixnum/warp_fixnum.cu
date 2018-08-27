@@ -3,6 +3,8 @@
 #include "slot_layout.cu"
 #include "word_fixnum.cu"
 
+namespace cuFIXNUM {
+
 /*
  * This is an archetypal implementation of a fixnum instruction
  * set. It defines the de facto interface for such implementations.
@@ -582,3 +584,5 @@ private:
         return (allcarries >> L) & 1;
     }
 };
+
+} // End namespace cuFIXNUM

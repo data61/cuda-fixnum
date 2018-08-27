@@ -3,6 +3,8 @@
 #include "functions/modinv.cu"
 #include "functions/quorem_preinv.cu"
 
+namespace cuFIXNUM {
+
 template< typename fixnum >
 class monty_mul {
 public:
@@ -171,3 +173,5 @@ monty_mul<fixnum>::normalise(fixnum &x, int msb, fixnum m) const {
         x = r;
     }
 }
+
+} // End namespace cuFIXNUM

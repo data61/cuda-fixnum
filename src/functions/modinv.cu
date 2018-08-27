@@ -1,5 +1,7 @@
 #pragma once
 
+namespace cuFIXNUM {
+
 /*
  * Calculate the modular inverse.
  * TODO: Only supports moduli of the form 2^k at the moment.
@@ -42,3 +44,4 @@ struct modinv {
     }
 };
 
+} // End namespace cuFIXNUM
