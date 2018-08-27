@@ -335,7 +335,7 @@ public:
         // one call.
         add(s, s, cy);
 
-        fixnum underflow, overflow;
+        fixnum overflow;
         lshift_small(s, s, 1);  // s *= 2
         lshift_small(r, overflow, r, 1);  // r *= 2
         add_cy(s, cy, s, overflow); // really a logior, since s was just lshifted.
