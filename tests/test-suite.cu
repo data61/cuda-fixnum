@@ -11,7 +11,7 @@
 #include "array/fixnum_array.h"
 #include "fixnum/word_fixnum.cu"
 #include "fixnum/warp_fixnum.cu"
-#include "functions/monty_mul.cu"
+#include "modnum/monty_mul.cu"
 #include "functions/modexp.cu"
 #include "functions/paillier_encrypt.cu"
 #include "functions/paillier_decrypt.cu"
