@@ -2,6 +2,7 @@
 
 #include "functions/quorem_preinv.cu"
 #include "functions/multi_modexp.cu"
+#include "modnum/monty_mul.cu"
 
 namespace cuFIXNUM {
 
@@ -27,9 +28,11 @@ public:
     }
 
 private:
+    typedef modnum_monty_cios<fixnum> modnum;
+
     fixnum n;
     fixnum n_sqr;
-    modexp<fixnum> pow;
+    modexp<modnum> pow;
     quorem_preinv<fixnum> mod_n2;
 
     // TODO: It is flipping stupid that this is necessary.

@@ -1,24 +1,26 @@
 #pragma once
 
 #include "functions/internal/modexp_impl.cu"
-#include "functions/monty_mul.cu"
+#include "modnum/monty_mul.cu"
 
 namespace cuFIXNUM {
 
 template<
-    typename fixnum,
-    int WINDOW_SIZE = internal::bytes_to_k_ary_window_size(fixnum::BYTES) >
+    typename modnum_tp,
+    int WINDOW_SIZE = internal::bytes_to_k_ary_window_size(modnum_tp::fixnum::BYTES) >
 class multi_modexp {
-    static_assert(WINDOW_SIZE >= 1 && WINDOW_SIZE < fixnum::digit::BITS,
+    static_assert(WINDOW_SIZE >= 1 && WINDOW_SIZE < modnum_tp::fixnum::digit::BITS,
         "Invalid window size.");
 
     // TODO: Generalise multi_modexp so that it can work with any modular
     // multiplication algorithm.
-    const monty_mul<fixnum> monty;
+    const modnum_tp modnum;
 
 public:
+    typedef typename modnum_tp::fixnum fixnum;
+
     __device__ multi_modexp(fixnum mod)
-    : monty(mod) { }
+    : modnum(mod) { }
 
     __device__ void operator()(fixnum &z, fixnum x, fixnum e) const;
 };
@@ -54,11 +56,11 @@ public:
  * 14.83] since there the number of squarings depends on the 2-adic valuation of
  * the window value.
  */
-template< typename fixnum, int WINDOW_SIZE >
+template< typename modnum_tp, int WINDOW_SIZE >
 __device__ void
-multi_modexp<fixnum, WINDOW_SIZE>::operator()(fixnum &z, fixnum x, fixnum e) const
+multi_modexp<modnum_tp, WINDOW_SIZE>::operator()(fixnum &z, fixnum x, fixnum e) const
 {
-    typedef typename fixnum::digit digit;
+    typedef typename modnum_tp::fixnum::digit digit;
     static constexpr int WIDTH = fixnum::SLOT_WIDTH;
 
     // Window decomposition: digit::BITS = q * WINDOW_SIZE + r.
@@ -67,11 +69,11 @@ multi_modexp<fixnum, WINDOW_SIZE>::operator()(fixnum &z, fixnum x, fixnum e) con
 
     /* G[t] = z^t, t >= 0 */
     fixnum G[WINDOW_MAX];
-    monty.to_monty(z, x);
-    G[0] = monty.one();
+    modnum.to_modnum(z, x);
+    G[0] = modnum.one();
     for (int t = 1; t < WINDOW_MAX; ++t) {
         G[t] = G[t - 1];
-        monty(G[t], G[t], z);
+        modnum.mul(G[t], G[t], z);
     }
 
     z = G[0];
@@ -87,22 +89,22 @@ multi_modexp<fixnum, WINDOW_SIZE>::operator()(fixnum &z, fixnum x, fixnum e) con
             // statements manually.  Idem for the remainder below.
             // Investigate how this is even possible!
             for (int k = 0; k < WINDOW_SIZE; ++k)
-                monty(z, z);
+                modnum.sqr(z, z);
             digit fj;
             // win = (f >> j) & WINDOW_MAIN_MASK;
             digit::rshift(fj, f, j);
             digit::rem_2exp(win, fj, WINDOW_SIZE);
-            monty(z, z, G[win]);
+            modnum.mul(z, z, G[win]);
         }
 
         // Remainder
         for (int k = 0; k < WINDOW_REM_BITS; ++k)
-            monty(z, z);
+            modnum.sqr(z, z);
         //win = f & WINDOW_REM_MASK;
         digit::rem_2exp(win, f, WINDOW_REM_BITS);
-        monty(z, z, G[win]);
+        modnum.mul(z, z, G[win]);
     }
-    monty.from_monty(z, z);
+    modnum.from_modnum(z, z);
 }
 
 } // End namespace cuFIXNUM

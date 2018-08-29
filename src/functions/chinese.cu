@@ -2,6 +2,7 @@
 
 #include "functions/quorem_preinv.cu"
 #include "functions/multi_modexp.cu"
+#include "modnum/monty_mul.cu"
 
 namespace cuFIXNUM {
 
@@ -25,6 +26,8 @@ __device__
 chinese<fixnum>::chinese(fixnum p_, fixnum q_)
     : p(p_), q(q_), mod_q(q)
 {
+    typedef modnum_monty_cios<fixnum> modnum;
+
     // TODO: q is now stored here and in mod_q; need to work out how
     // to share q between them.  Probably best just to provide quorem_preinv
     // with an accessor to the divisor.
@@ -33,7 +36,7 @@ chinese<fixnum>::chinese(fixnum p_, fixnum q_)
     // Use a^(q-2) = 1 (mod q)
     fixnum qm2, two = fixnum::two();
     fixnum::sub(qm2, q, two);
-    multi_modexp<fixnum> minv(q);
+    multi_modexp<modnum> minv(q);
     minv(c, p, qm2);
 }
 

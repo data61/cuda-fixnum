@@ -5,6 +5,7 @@
 #include "fixnum/warp_fixnum.cu"
 #include "array/fixnum_array.h"
 #include "functions/modexp.cu"
+#include "modnum/monty_mul.cu"
 
 using namespace std;
 using namespace cuFIXNUM;
@@ -39,8 +40,9 @@ struct sqr_wide {
 template< typename fixnum >
 struct my_modexp {
     __device__ void operator()(fixnum &z, fixnum x) {
+        typedef modnum_monty_cios<fixnum> modnum;
+        modexp<modnum> me(x, x);
         fixnum zz;
-        modexp<fixnum> me(x, x);
         me(zz, x);
         z = zz;
     };
