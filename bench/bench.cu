@@ -5,7 +5,7 @@
 #include "fixnum/warp_fixnum.cu"
 #include "array/fixnum_array.h"
 #include "functions/modexp.cu"
-#include "modnum/monty_mul.cu"
+#include "modnum/modnum_monty_cios.cu"
 
 using namespace std;
 using namespace cuFIXNUM;
