@@ -410,7 +410,8 @@ TYPED_TEST(TypedPrimitives, sqr_wide) {
 template< typename fixnum >
 struct my_modexp {
     __device__ void operator()(fixnum &z, fixnum x, fixnum e, fixnum m) {
-        modexp<fixnum> me(m, e);
+        typedef modnum_monty_cios<fixnum> modnum;
+        modexp<modnum> me(m, e);
         fixnum zz;
         me(zz, x);
         z = zz;
@@ -451,7 +452,8 @@ TYPED_TEST(TypedPrimitives, modexp) {
 template< typename fixnum >
 struct my_multi_modexp {
     __device__ void operator()(fixnum &z, fixnum x, fixnum e, fixnum m) {
-        multi_modexp<fixnum> mme(m);
+        typedef modnum_monty_cios<fixnum> modnum;
+        multi_modexp<modnum> mme(m);
         fixnum zz;
         mme(zz, x, e);
         z = zz;

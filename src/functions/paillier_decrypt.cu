@@ -4,6 +4,7 @@
 #include "functions/divexact.cu"
 #include "functions/chinese.cu"
 #include "functions/multi_modexp.cu"
+#include "modnum/monty_mul.cu"
 
 namespace cuFIXNUM {
 
@@ -90,7 +91,8 @@ private:
     quorem_preinv<fixnum> mod_p2;
 
     // Modexp for x |--> x^(p - 1) (mod p^2)
-    modexp<fixnum> pow;
+    typedef modnum_monty_cios<fixnum> modnum;
+    modexp<modnum> pow;
 
     // TODO: It is flipping stupid that these are necessary.
     __device__ fixnum square(fixnum p) {
@@ -135,7 +137,7 @@ paillier_decrypt_mod<fixnum>::paillier_decrypt_mod(fixnum p, fixnum n)
     // Use a^(p-2) = 1 (mod p)
     fixnum pm2;
     fixnum::sub(pm2, p, fixnum::two());
-    multi_modexp<fixnum> minv(p);
+    multi_modexp<modnum> minv(p);
     minv(h, t, pm2);
 }
 

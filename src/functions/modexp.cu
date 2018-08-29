@@ -5,8 +5,9 @@
 
 namespace cuFIXNUM {
 
-template< typename fixnum >
+template< typename modnum_tp >
 class modexp {
+    typedef typename modnum_tp::fixnum fixnum;
     typedef typename fixnum::digit digit;
 
     // Decomposition of the exponent for use in the constant-width sliding-window
@@ -17,9 +18,7 @@ class modexp {
     int exp_wins_len;
     int window_size;
 
-    // TODO: Generalise modexp so that it can work with any modular
-    // multiplication algorithm.
-    const monty_mul<fixnum> monty;
+    const modnum_tp modnum;
 
     // Helper functions for decomposing the exponent into windows.
     __device__ uint32_t
@@ -44,9 +43,9 @@ public:
 };
 
 
-template< typename fixnum >
+template< typename modnum_tp >
 __device__ uint32_t
-modexp<fixnum>::scan_nonzero_window(int &hi_idx, fixnum &n, int max_window_bits) {
+modexp<modnum_tp>::scan_nonzero_window(int &hi_idx, fixnum &n, int max_window_bits) {
     uint32_t bits_remaining = hi_idx + 1, win_bits;
     digit w, lsd = fixnum::bottom_digit(n);
 
@@ -59,9 +58,9 @@ modexp<fixnum>::scan_nonzero_window(int &hi_idx, fixnum &n, int max_window_bits)
 }
 
 
-template< typename fixnum >
+template< typename modnum_tp >
 __device__ int
-modexp<fixnum>::scan_zero_window(int &hi_idx, fixnum &n) {
+modexp<modnum_tp>::scan_zero_window(int &hi_idx, fixnum &n) {
     int nzeros = fixnum::two_valuation(n);
     fixnum::rshift(n, n, nzeros);
     hi_idx -= nzeros;
@@ -69,9 +68,9 @@ modexp<fixnum>::scan_zero_window(int &hi_idx, fixnum &n) {
 }
 
 
-template< typename fixnum >
+template< typename modnum_tp >
 __device__ uint32_t
-modexp<fixnum>::scan_window(int &hi_idx, fixnum &n, int max_window_bits) {
+modexp<modnum_tp>::scan_window(int &hi_idx, fixnum &n, int max_window_bits) {
     int nzeros;
     uint32_t window;
     nzeros = scan_zero_window(hi_idx, n);
@@ -82,10 +81,10 @@ modexp<fixnum>::scan_window(int &hi_idx, fixnum &n, int max_window_bits) {
 }
 
 
-template< typename fixnum >
+template< typename modnum_tp >
 __device__
-modexp<fixnum>::modexp(fixnum mod, fixnum exp)
-    : monty(mod)
+modexp<modnum_tp>::modexp(fixnum mod, fixnum exp)
+    : modnum(mod)
 {
     // sliding window decomposition
     int hi_idx;
@@ -115,18 +114,18 @@ modexp<fixnum>::modexp(fixnum mod, fixnum exp)
 }
 
 
-template< typename fixnum >
+template< typename modnum_tp >
 __device__
-modexp<fixnum>::~modexp()
+modexp<modnum_tp>::~modexp()
 {
     if (fixnum::layout::laneIdx() == 0)
         free(exp_wins);
 }
 
 
-template< typename fixnum >
+template< typename modnum_tp >
 __device__ void
-modexp<fixnum>::operator()(fixnum &z, fixnum x) const
+modexp<modnum_tp>::operator()(fixnum &z, fixnum x) const
 {
     static constexpr int WINDOW_MAX_BITS = 16;
     static constexpr int WINDOW_LEN_MASK = (1UL << WINDOW_MAX_BITS) - 1UL;
@@ -143,7 +142,7 @@ modexp<fixnum>::operator()(fixnum &z, fixnum x) const
         //z = fixnum::one();
         // TODO: This complicated way of producing a 1 is to
         // accommodate the possibility that monty.is_valid is false.
-        monty.from_monty(z, monty.one());
+        modnum.from_modnum(z, modnum.one());
         return;
     }
 
@@ -152,13 +151,13 @@ modexp<fixnum>::operator()(fixnum &z, fixnum x) const
     int window_max = 1U << window_size;
     /* G[t] = z^(2t + 1) t >= 0 (odd powers of z) */
     fixnum G[WINDOW_MAX_VAL_REDUCED / 2];
-    monty.to_monty(z, x);
+    modnum.to_modnum(z, x);
     G[0] = z;
     if (window_size > 1) {
-        monty(z, z);
+        modnum.sqr(z, z);
         for (int t = 1; t < window_max / 2; ++t) {
             G[t] = G[t - 1];
-            monty(G[t], G[t], z);
+            modnum.mul(G[t], G[t], z);
         }
     }
 
@@ -171,22 +170,22 @@ modexp<fixnum>::operator()(fixnum &z, fixnum x) const
 
     z = G[e / 2];
     while (two_val-- > 0)
-        monty(z, z);
+        modnum.sqr(z, z);
 
     while (windows >= exp_wins) {
         two_val = window_size;
         while (two_val-- > 0)
-            monty(z, z);
+            modnum.sqr(z, z);
 
         win = *windows--;
         two_val = win & WINDOW_LEN_MASK;
         e = win >> WINDOW_MAX_BITS;
 
-        monty(z, z, G[e / 2]);
+        modnum.mul(z, z, G[e / 2]);
         while (two_val-- > 0)
-            monty(z, z);
+            modnum.sqr(z, z);
     }
-    monty.from_monty(z, z);
+    modnum.from_modnum(z, z);
 }
 
 } // End namespace cuFIXNUM
