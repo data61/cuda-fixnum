@@ -1,7 +1,7 @@
 #pragma once
 
 #include "functions/modinv.cu"
-#include "functions/quorem_preinv.cu"
+#include "modnum/internal/monty.cu"
 
 namespace cuFIXNUM {
 
@@ -13,23 +13,11 @@ public:
 
     __device__ modnum_monty_cios(fixnum modulus);
 
-    __device__ void add(modnum &z, modnum x, modnum y) const {
-        fixnum::add(z, x, y);
-        if (fixnum::cmp(z, mod) >= 0)
-            sub(z, z, mod);
-    }
-
-    __device__ void neg(modnum &z, modnum x) const {
-        fixnum::sub(z, mod, x);
-    }
-
-    __device__ void sub(modnum &z, modnum x, modnum y) const {
-        fixnum my;
-        neg(my, y);
-        fixnum::add(z, x, my);
-        if (fixnum::cmp(z, mod) >= 0)
-            sub(z, z, mod);
-    }
+    __device__ modnum zero() const { return monty.zero(); }
+    __device__ modnum one() const { return monty.one(); }
+    __device__ void add(modnum &z, modnum x, modnum y) const { monty.add(z, x, y); }
+    __device__ void sub(modnum &z, modnum x, modnum y) const { monty.sub(z, x, y); }
+    __device__ void neg(modnum &z, modnum x, modnum y) const { monty.neg(z, x); }
 
     /**
      * z <- x * y
@@ -46,7 +34,7 @@ public:
     // TODO: Might be worth specialising multiplication for this case, since one of
     // the operands is known.
     __device__ void to_modnum(modnum &z, fixnum x) const {
-        mul(z, x, Rsqr_mod);
+        mul(z, x, monty.Rsqr_mod);
     }
 
     // TODO: Might be worth specialising multiplication for this case, since one of
@@ -55,61 +43,28 @@ public:
         mul(z, x, fixnum::one());
     }
 
-    /*
-     * Return the Montgomery image of one.
-     */
-    __device__ modnum one() const {
-        return R_mod;
-    }
-
 private:
     typedef typename fixnum::digit digit;
     // TODO: Check whether we can get rid of this declaration
     static constexpr int WIDTH = fixnum::SLOT_WIDTH;
 
-    // FIXME: Get rid of this hack
-    int is_valid;
+    internal::monty<fixnum> monty;
 
-    // Modulus for Monty arithmetic
-    fixnum mod;
-    // R_mod = 2^fixnum::BITS % mod
-    modnum R_mod;
-    // Rsqr = R^2 % mod
-    modnum Rsqr_mod;
     // inv_mod * mod = -1 % 2^digit::BITS.
     digit  inv_mod;
 
-    // TODO: We save this after using it in the constructor; work out
-    // how to make it available for later use. For example, it could
-    // be used to reduce arguments to modexp prior to the main
-    // iteration.
-    quorem_preinv<fixnum> modrem;
-
     __device__ void normalise(modnum &x, int msb, modnum m) const;
+
 };
 
 
 template< typename fixnum >
 __device__
-modnum_monty_cios<fixnum>::modnum_monty_cios(fixnum modulus)
-: mod(modulus), modrem(modulus)
+modnum_monty_cios<fixnum>::modnum_monty_cios(fixnum mod)
+: monty(mod)
 {
-    // mod must be odd > 1 in order to calculate R^-1 mod "mod".
-    // FIXME: Handle these errors properly
-    if (fixnum::two_valuation(modulus) != 0 //fixnum::get(modulus, 0) & 1 == 0
-            || fixnum::cmp(modulus, fixnum::one()) == 0) {
-        is_valid = 0;
+    if ( ! monty.is_valid)
         return;
-    }
-    is_valid = 1;
-
-    fixnum Rsqr_hi, Rsqr_lo;
-
-    // R_mod = R % mod
-    modrem(R_mod, fixnum::one(), fixnum::zero());
-    fixnum::sqr_wide(Rsqr_hi, Rsqr_lo, R_mod);
-    // Rsqr_mod = R^2 % mod
-    modrem(Rsqr_mod, Rsqr_hi, Rsqr_lo);
 
     // TODO: Tidy this up.
     modinv<fixnum> minv;
@@ -136,8 +91,8 @@ modnum_monty_cios<fixnum>::mul(modnum &z, modnum x, modnum y) const
 {
     typedef typename fixnum::layout layout;
     // FIXME: Fix this hack!
-    z = fixnum::zero();
-    if (!is_valid) { return; }
+    z = zero();
+    if (!monty.is_valid) { return; }
 
     int L = layout::laneIdx();
     digit tmp;
@@ -153,7 +108,7 @@ modnum_monty_cios<fixnum>::mul(modnum &z, modnum x, modnum y) const
 
         digit::mad_lo(u, z0, inv_mod, tmpi);
 
-        digit::mad_lo_cy(z, cy, mod, u, z);
+        digit::mad_lo_cy(z, cy, monty.mod, u, z);
         digit::mad_lo_cy(z, cy, y, xi, z);
 
         assert(L || digit::is_zero(z));  // z[0] must be 0
@@ -161,7 +116,7 @@ modnum_monty_cios<fixnum>::mul(modnum &z, modnum x, modnum y) const
 
         digit::add_cy(z, cy, z, cy);
 
-        digit::mad_hi_cy(z, cy, mod, u, z);
+        digit::mad_hi_cy(z, cy, monty.mod, u, z);
         digit::mad_hi_cy(z, cy, y, xi, z);
     }
     // Resolve carries
@@ -171,7 +126,7 @@ modnum_monty_cios<fixnum>::mul(modnum &z, modnum x, modnum y) const
     digit::add(msw, msw, cy);
     assert(msw == !!msw); // msw = 0 or 1.
 
-    normalise(z, (int) msw, mod);
+    normalise(z, (int) msw, monty.mod);
 }
 
 /*
