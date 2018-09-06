@@ -76,7 +76,11 @@ __device__ void
 modnum_monty_redc<fixnum>::redc(fixnum &r, fixnum a_hi, fixnum a_lo) const {
     typedef typename fixnum::digit digit;
     fixnum b, s_hi, s_lo;
-    digit cy;
+    digit cy, c;
+
+    // FIXME: Fix this hack!
+    r = zero();
+    if (!monty.is_valid) return;
 
     fixnum::mul_lo(b, a_lo, inv_mod);
 
@@ -88,18 +92,25 @@ modnum_monty_redc<fixnum>::redc(fixnum &r, fixnum a_hi, fixnum a_lo) const {
     // TODO: Only want the carry; find a cheaper way to determine that
     // without doing the full addition.
     fixnum::add_cy(s_lo, cy, s_lo, a_lo);
-#ifndef NDEBUG
+    // TODO: The assert below fails; work out why.
+#if 0
     // NB: b = am' (mod R) => a + bm = a + amm' = 2a (mod R). So surely
     // all I need to propagate is the top bit of a_lo?
     fixnum top_bit, dummy;
     fixnum::lshift(dummy, top_bit, a_lo, 1);
     assert(digit::cmp(cy, top_bit) == 0);
 #endif
-    fixnum::add(r, s_hi, a_hi);
-    fixnum::add(r, r, cy);
+    // TODO: The fact that we need to turn cy into a fixnum before using it in
+    // arithmetic should be handled more cleanly. Also, this code is already in
+    // the private function digit_to_fixnum() in ''warp_fixnum.cu'.
+    int L = fixnum::layout::laneIdx();
+    cy = (L == 0) ? cy : digit::zero();
+    fixnum::add_cy(r, cy, s_hi, cy);
+    fixnum::add_cy(r, c, r, a_hi);
+    digit::add(cy, cy, c);
+    assert(cy == !!cy); // cy = 0 or 1.
 
-    if (fixnum::cmp(r, monty.mod) >= 0)
-        sub(r, r, monty.mod);
+    monty.normalise(r, cy);
 }
 
 } // End namespace cuFIXNUM
