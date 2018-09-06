@@ -52,9 +52,6 @@ private:
 
     // inv_mod * mod = -1 % 2^digit::BITS.
     digit  inv_mod;
-
-    __device__ void normalise(modnum &x, int msb, modnum m) const;
-
 };
 
 
@@ -126,27 +123,7 @@ modnum_monty_cios<fixnum>::mul(modnum &z, modnum x, modnum y) const
     digit::add(msw, msw, cy);
     assert(msw == !!msw); // msw = 0 or 1.
 
-    normalise(z, (int) msw, monty.mod);
-}
-
-/*
- * Let X = x + msb * 2^64.  Then return X -= m if X > m.
- *
- * Assumes X < 2*m, i.e. msb = 0 or 1, and if msb = 1, then x < m.
- */
-template< typename fixnum >
-__device__ void
-modnum_monty_cios<fixnum>::normalise(modnum &x, int msb, modnum m) const {
-    modnum r;
-    digit br;
-
-    // br = 0 ==> x >= m
-    fixnum::sub_br(r, br, x, m);
-    if (msb || digit::is_zero(br)) {
-        // If the msb was set, then we must have had to borrow.
-        assert(!msb || msb == br);
-        x = r;
-    }
+    monty.normalise(z, (int)msw);
 }
 
 } // End namespace cuFIXNUM

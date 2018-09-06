@@ -61,6 +61,8 @@ public:
     // be used to reduce arguments to modexp prior to the main
     // iteration.
     quorem_preinv<fixnum> modrem;
+
+    __device__ void normalise(modnum &x, int msb) const;
 };
 
 
@@ -85,6 +87,27 @@ monty<fixnum>::monty(fixnum modulus)
     fixnum::sqr_wide(Rsqr_hi, Rsqr_lo, R_mod);
     // Rsqr_mod = R^2 % mod
     modrem(Rsqr_mod, Rsqr_hi, Rsqr_lo);
+}
+
+/*
+ * Let X = x + msb * 2^64.  Then return X -= m if X > m.
+ *
+ * Assumes X < 2*m, i.e. msb = 0 or 1, and if msb = 1, then x < m.
+ */
+template< typename fixnum >
+__device__ void
+monty<fixnum>::normalise(modnum &x, int msb) const {
+    typedef typename fixnum::digit digit;
+    modnum r;
+    digit br;
+
+    // br = 0 ==> x >= mod
+    fixnum::sub_br(r, br, x, mod);
+    if (msb || digit::is_zero(br)) {
+        // If the msb was set, then we must have had to borrow.
+        assert(!msb || msb == br);
+        x = r;
+    }
 }
 
 } // End namespace internal
