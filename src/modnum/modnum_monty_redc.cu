@@ -12,12 +12,17 @@ public:
 
     __device__ modnum_monty_redc(fixnum mod)
     : monty(mod) {
-        if ( ! monty.is_valid)
-            return;
+        if ( ! monty.is_valid) return;
 
         modinv<fixnum> minv;
         minv(inv_mod, mod, fixnum::BITS);
         fixnum::neg(inv_mod, inv_mod);
+#ifndef NDEBUG
+        fixnum tmp;
+        fixnum::mul_lo(tmp, inv_mod, mod);
+        fixnum::add(tmp, tmp, fixnum::one());
+        assert(fixnum::is_zero(tmp));
+#endif
     }
 
     __device__ modnum zero() const { return monty.zero(); }
@@ -29,7 +34,7 @@ public:
     __device__ void sqr(modnum &z, modnum x) const {
         // FIXME: Fix this hack!
         z = zero();
-        if (!monty.is_valid) { return; }
+        if (!monty.is_valid) return;
 
         modnum a_hi, a_lo;
         fixnum::sqr_wide(a_hi, a_lo, x);
@@ -39,7 +44,7 @@ public:
     __device__ void mul(modnum &z, modnum x, modnum y) const {
         // FIXME: Fix this hack!
         z = zero();
-        if (!monty.is_valid) { return; }
+        if (!monty.is_valid) return;
 
         modnum a_hi, a_lo;
         fixnum::mul_wide(a_hi, a_lo, x, y);

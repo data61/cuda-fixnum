@@ -51,6 +51,8 @@ public:
     __device__ __forceinline__
     warp_fixnum() { }
 
+    // TODO: Shouldn't this be equivalent to the digit_to_fixnum() function
+    // below?
     __device__ __forceinline__
     warp_fixnum(digit z) : x(z) { }
 
