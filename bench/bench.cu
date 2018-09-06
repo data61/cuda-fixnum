@@ -5,6 +5,8 @@
 #include "fixnum/warp_fixnum.cu"
 #include "array/fixnum_array.h"
 #include "functions/modexp.cu"
+#include "functions/multi_modexp.cu"
+#include "modnum/modnum_monty_redc.cu"
 #include "modnum/modnum_monty_cios.cu"
 
 using namespace std;
@@ -37,13 +39,26 @@ struct sqr_wide {
     }
 };
 
-template< typename fixnum >
+template< typename modnum >
 struct my_modexp {
+    typedef typename modnum::fixnum fixnum;
+
     __device__ void operator()(fixnum &z, fixnum x) {
-        typedef modnum_monty_cios<fixnum> modnum;
         modexp<modnum> me(x, x);
         fixnum zz;
         me(zz, x);
+        z = zz;
+    };
+};
+
+template< typename modnum >
+struct my_multi_modexp {
+    typedef typename modnum::fixnum fixnum;
+
+    __device__ void operator()(fixnum &z, fixnum x) {
+        multi_modexp<modnum> mme(x);
+        fixnum zz;
+        mme(zz, x, x);
         z = zz;
     };
 };
@@ -101,6 +116,18 @@ void bench_func(const char *fn_name, int nelts) {
     puts("");
 }
 
+template< typename fixnum >
+using modexp_redc = my_modexp< modnum_monty_redc<fixnum> >;
+
+template< typename fixnum >
+using modexp_cios = my_modexp< modnum_monty_cios<fixnum> >;
+
+template< typename fixnum >
+using multi_modexp_redc = my_multi_modexp< modnum_monty_redc<fixnum> >;
+
+template< typename fixnum >
+using multi_modexp_cios = my_multi_modexp< modnum_monty_cios<fixnum> >;
+
 int main(int argc, char *argv[]) {
     long m = 1;
     if (argc > 1)
@@ -112,7 +139,15 @@ int main(int argc, char *argv[]) {
     puts("");
     bench_func<sqr_wide>("sqr_wide", m);
     puts("");
-    bench_func<my_modexp>("modexp", m / 100);
+    bench_func<modexp_redc>("modexp redc", m / 100);
+    puts("");
+    bench_func<modexp_cios>("modexp cios", m / 100);
+    puts("");
+
+    bench_func<modexp_redc>("multi modexp redc", m / 100);
+    puts("");
+    bench_func<modexp_cios>("multi modexp cios", m / 100);
+    puts("");
 
     return 0;
 }
