@@ -92,6 +92,13 @@ modnum_monty_redc<fixnum>::redc(fixnum &r, fixnum a_hi, fixnum a_lo) const {
     // TODO: Only want the carry; find a cheaper way to determine that
     // without doing the full addition.
     fixnum::add_cy(s_lo, cy, s_lo, a_lo);
+
+    // TODO: The fact that we need to turn cy into a fixnum before using it in
+    // arithmetic should be handled more cleanly. Also, this code is already in
+    // the private function digit_to_fixnum() in ''warp_fixnum.cu'.
+    int L = fixnum::layout::laneIdx();
+    cy = (L == 0) ? cy : digit::zero();
+
     // TODO: The assert below fails; work out why.
 #if 0
     // NB: b = am' (mod R) => a + bm = a + amm' = 2a (mod R). So surely
@@ -100,11 +107,6 @@ modnum_monty_redc<fixnum>::redc(fixnum &r, fixnum a_hi, fixnum a_lo) const {
     fixnum::lshift(dummy, top_bit, a_lo, 1);
     assert(digit::cmp(cy, top_bit) == 0);
 #endif
-    // TODO: The fact that we need to turn cy into a fixnum before using it in
-    // arithmetic should be handled more cleanly. Also, this code is already in
-    // the private function digit_to_fixnum() in ''warp_fixnum.cu'.
-    int L = fixnum::layout::laneIdx();
-    cy = (L == 0) ? cy : digit::zero();
     fixnum::add_cy(r, cy, s_hi, cy);
     fixnum::add_cy(r, c, r, a_hi);
     digit::add(cy, cy, c);
