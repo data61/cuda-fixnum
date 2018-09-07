@@ -2,7 +2,7 @@
 
 #include "functions/quorem_preinv.cu"
 #include "functions/multi_modexp.cu"
-#include "modnum/monty_mul.cu"
+#include "modnum/modnum_monty_cios.cu"
 
 namespace cuFIXNUM {
 
