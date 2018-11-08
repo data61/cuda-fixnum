@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cassert>
 #include <type_traits>
 
 namespace cuFIXNUM {
@@ -722,7 +723,7 @@ namespace internal {
 
         uint_tp q_hi, q_lo, mask;
 
-        umul(q_hi, q_lo, u_hi, v);
+        mul_wide(q_hi, q_lo, u_hi, v);
         q_lo += u_lo;
         q_hi += u_hi + (q_lo < u_lo) + 1;
         r = u_lo - q_hi * d;
@@ -760,7 +761,7 @@ namespace internal {
         uint_tp v = quorem_reciprocal(d);
         if (overflow) { q = r = (uint_tp)-1; return v; }
         quorem_wide_normalised(q, r, u_hi, u_lo, d, v);
-        assert(r & (((uint_tp)1 << lz) - 1) == 0);
+        assert((r & (((uint_tp)1 << lz) - 1U)) == 0);
         r >>= lz;
         return v;
     }
