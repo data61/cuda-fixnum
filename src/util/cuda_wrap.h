@@ -20,8 +20,10 @@ cuda_print_errmsg(cudaError err, const char *msg, const char *file, const int li
     }
 }
 
+} // End namespace cuFIXNUM
+
 #define cuda_check(err, msg)                            \
-    cuda_print_errmsg(err, msg, __FILE__, __LINE__)
+    ::cuFIXNUM::cuda_print_errmsg(err, msg, __FILE__, __LINE__)
 
 #define cuda_malloc(ptr, size)                                  \
     cuda_check(cudaMalloc(ptr, size), "memory allocation")
@@ -46,5 +48,3 @@ cuda_print_errmsg(cudaError err, const char *msg, const char *file, const int li
 #define cuda_device_synchronize() \
     cuda_check(cudaDeviceSynchronize(), "device synchronize")
 
-
-} // End namespace cuFIXNUM

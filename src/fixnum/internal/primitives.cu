@@ -735,10 +735,10 @@ namespace internal {
         r += mask & d;
 
         // Branch is very unlikely to be taken
-        //if (r >= d) { r -= d; ++q_hi; }
-        mask = -(uint_tp)(r >= d);
-        q_hi -= mask;
-        r -= mask & d;
+        if (r >= d) { r -= d; ++q_hi; }
+        //mask = -(uint_tp)(r >= d);
+        //q_hi -= mask;
+        //r -= mask & d;
 
         q = q_hi;
     }
@@ -785,7 +785,7 @@ namespace internal {
         uint_tp overflow = quorem_normalise_dividend(u_hi, u_lo, lz);
         if (overflow) { q = r = -(uint_tp)1; }
         quorem_wide_normalised(q, r, u_hi, u_lo, d, v);
-        assert(r & (((uint_tp)1 << lz) - 1) == 0);
+        assert((r & (((uint_tp)1 << lz) - 1U)) == 0);
         r >>= lz;
     }
 
