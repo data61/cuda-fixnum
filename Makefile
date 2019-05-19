@@ -1,5 +1,5 @@
 INCLUDE_DIRS = -I./src
-NVCC_FLAGS = -ccbin clang-3.8 -Wno-deprecated-declarations -std=c++11 -Xcompiler -Wall,-Wextra
+NVCC_FLAGS = -ccbin clang-3.8 -std=c++11 -Xcompiler -Wall,-Wextra
 NVCC_OPT_FLAGS = -DNDEBUG
 NVCC_TEST_FLAGS = -lineinfo
 NVCC_DBG_FLAGS = -g -G
