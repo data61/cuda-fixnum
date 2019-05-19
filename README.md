@@ -124,6 +124,10 @@ void host_function() {
 }
 ```
 
+## Building
+
+The build system for cuda-fixnum is currently, shall we say, _primitive_. Basically you can run `make bench` to build the benchmarking program, or `make check` to build and run the test suite. The test suite requires the [Google Test framework](https://github.com/google/googletest) to be installed. The Makefile will read in the variables `CXX` and `GENCODES` from the environment as a convenient way to specify the C++ compiler to use and the Cuda compute capability codes that you want to compile with. The defaults are `CXX = g++` and `GENCODES = 50`.
+
 ## Benchmarks
 
 Here is the output from a recent run of the benchmark with a GTX Titan X (Maxwell, 1GHz clock, 3072 cores):
