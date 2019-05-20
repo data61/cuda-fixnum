@@ -26,12 +26,6 @@ static constexpr int WARPSIZE = 32;
  * The term "warp" should be reserved for subwarps of width 32
  * (=warpSize).
  *
- * TODO: All of the warp vote and warp shuffle functions will be
- * deprecated in CUDA 9.0 in favour of versions that take a mask
- * selecting relevant lanes in the warp on which to act (see CUDA
- * Programming Guide, B.15). Create an interface that encapsulates
- * both.
- *
  * TODO: Work out if using __forceinline__ in these definitions
  * actually achieves anything.
  */
@@ -122,7 +116,7 @@ struct slot_layout
     static __device__ __forceinline__
     uint32_t
     ballot(int tst) {
-        return __ballot(tst);
+        return __ballot_sync(0xFFFFFFFF, tst);
     }
 #endif
 
@@ -133,7 +127,9 @@ struct slot_layout
     __device__ __forceinline__
     static uint32_t
     ballot(int tst) {
-        uint32_t b = __ballot(tst);
+        // TODO: Use the mask parameter to ballot_sync to achieve the
+        // masked ballot.
+        uint32_t b = __ballot_sync(0xFFFFFFFF, tst);
         b >>= offset();
         return b & mask;
     }

@@ -68,6 +68,11 @@ void bench(int nelts) {
     typedef warp_fixnum<fn_bytes, word_fixnum> fixnum;
     typedef fixnum_array<fixnum> fixnum_array;
 
+    if (nelts == 0) {
+        puts(" -*-  nelts == 0; skipping...  -*-");
+        return;
+    }
+
     uint8_t *input = new uint8_t[fn_bytes * nelts];
     for (int i = 0; i < fn_bytes * nelts; ++i)
         input[i] = (i * 17 + 11) % 256;
@@ -132,6 +137,7 @@ int main(int argc, char *argv[]) {
     long m = 1;
     if (argc > 1)
         m = atol(argv[1]);
+    m = std::max(m, 1000L);
 
     bench_func<mul_lo>("mul_lo", m);
     puts("");
