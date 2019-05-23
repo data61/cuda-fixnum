@@ -4,6 +4,10 @@ tests/sub_*
 tests/mul_*
 tests/modexp_*
 tests/paillier_*
+tests/test-suite
+
+# Benchmark
+bench/bench
 
 # Object files
 *.o
