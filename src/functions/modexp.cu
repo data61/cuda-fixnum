@@ -106,7 +106,7 @@ modexp<modnum_tp>::modexp(fixnum mod, fixnum exp)
         assert(data != nullptr);
     }
     // Broadcast data to each thread in the slot.
-    exp_wins = (uint32_t *) __shfl_sync(0xFFFFFFFF, (uintptr_t)data, 0, fixnum::layout::WIDTH);
+    exp_wins = (uint32_t *) __shfl_sync(fixnum::layout::mask(), (uintptr_t)data, 0, fixnum::layout::WIDTH);
     uint32_t *ptr = exp_wins;
     while (hi_idx >= 0)
         *ptr++ = scan_window(hi_idx, exp, window_size);

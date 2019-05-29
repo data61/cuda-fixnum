@@ -67,7 +67,11 @@ struct slot_layout
      *
      * Useful in conjunction with offset() and __ballot().
      */
-    static constexpr std::uint32_t mask = (1UL << width) - 1UL;
+    static __device__ __forceinline__
+    std::uint32_t
+    mask() {
+        return ((1UL << width) - 1UL) << offset();
+    }
 
     /*
      * Return the thread index within the warp where the slot
@@ -103,23 +107,6 @@ struct slot_layout
         return tid - (tid & (width - 1));
     }
 
-#if 0
-    // TODO: Check if it is worth putting this in a specialisation of
-    // width = warpSize. Note that, in the implementation below,
-    // slotMask() will be a compile-time constant of 0xfff... so
-    // the '&' instruction will be removed; however it's not clear
-    // that the compiler will work out that slotOffset()
-    // is always 0 when width = warpSize.
-    /*
-     * Wrapper for notation consistency.
-     */
-    static __device__ __forceinline__
-    uint32_t
-    ballot(int tst) {
-        return __ballot_sync(0xFFFFFFFF, tst);
-    }
-#endif
-
     /*
      * Like ballot(tst) but restrict the result to the containing slot
      * of size width.
@@ -127,11 +114,8 @@ struct slot_layout
     __device__ __forceinline__
     static uint32_t
     ballot(int tst) {
-        // TODO: Use the mask parameter to ballot_sync to achieve the
-        // masked ballot.
-        uint32_t b = __ballot_sync(0xFFFFFFFF, tst);
-        b >>= offset();
-        return b & mask;
+        uint32_t b = __ballot_sync(mask(), tst);
+        return b >> offset();
     }
 
     /*
@@ -140,19 +124,19 @@ struct slot_layout
     __device__ __forceinline__
     static T
     shfl(T var, int srcLane) {
-        return __shfl_sync(0xFFFFFFFF, var, srcLane, width);
+        return __shfl_sync(mask(), var, srcLane, width);
     }
 
     __device__ __forceinline__
     static T
     shfl_up(T var, unsigned int delta) {
-        return __shfl_up_sync(0xFFFFFFFF, var, delta, width);
+        return __shfl_up_sync(mask(), var, delta, width);
     }
 
     __device__ __forceinline__
     static T
     shfl_down(T var, unsigned int delta) {
-        return __shfl_down_sync(0xFFFFFFFF, var, delta, width);
+        return __shfl_down_sync(mask(), var, delta, width);
     }
 
     // NB: Assumes delta <= width + L. (There should be no reason for
