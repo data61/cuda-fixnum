@@ -3,7 +3,7 @@
 
 The primary use case for fast arithmetic of numbers in the range covered by `cuda-fixnum` is in cryptography and computational number theory; in particular it can form an integral part in accelerating homomorphic encryption primitives as used in privacy-preserving machine learning. As such, special attention is given to support modular arithmetic; this is used in an example implementation of the Paillier additively homomorphic encryption scheme and of elliptic curve scalar multiplication.  Future releases will provide additional support for operations useful to implementing Ring-LWE-based somewhat homomorphic encryption schemes.
 
-Finally, the library is designed to be _fast_. Through exploitation of warp-synchronous programming, vote functions, and deferred carry handling, the primitives of the library are currently competitive with the state-of-the-art in the literature for modular multiplication and modular exponentiation on GPUs.  The design of the library allows transparent substitution of the underlying arithmetic, allowing the user to select whichever performs best on the available hardware. Moreover, several algorithms, both novel and from the literature, will be incorporated shortly that will improve performance by a further 25-50%.
+Finally, the library is designed to be _fast_. Through exploitation of warp-synchronous programming, vote functions, and deferred carry handling, the primitives of the library are currently competitive with the state-of-the-art in the literature for modular multiplication and modular exponentiation on GPUs.  The design of the library allows transparent substitution of the underlying arithmetic, allowing the user to select whichever performs best on the available hardware. Moreover, several algorithms, both novel and from the literature, will be incoporated shortly that will improve performance by a further 25-50%.
 
 The library is currently at the _alpha_ stage of development.  It has many rough edges, but most features are present and it is performant enough to be competitive.  Comments, questions and contributions are welcome!
 
@@ -126,14 +126,23 @@ void host_function() {
 
 ## Building
 
-The build system for cuda-fixnum is currently, shall we say, _primitive_. Basically you can run `make bench` to build the benchmarking program, or `make check` to build and run the test suite. The test suite requires the [Google Test framework](https://github.com/google/googletest) to be installed. The Makefile will read in the variables `CXX` and `GENCODES` from the environment as a convenient way to specify the C++ compiler to use and the Cuda compute capability codes that you want to compile with. The defaults are `CXX = g++` and `GENCODES = 50`.
+```
+mkdir build
+cd build
+cmake ..
+make bench
+```
+
+The build system for cuda-fixnum use CMake.  Create a working directory to build in and run cmake from there.  Then you can run `make bench` to build the benchmarking program, or `make check` to build and run the test suite. The test suite requires the [Google Test framework](https://github.com/google/googletest) to be installed.
+
+CMake attempts to detect and set the proper flags for you GPU architecture, but you can override them or cross compile if needed.
 
 ## Benchmarks
 
 Here is the output from a recent run of the benchmark with a GTX Titan X (Maxwell, 1GHz clock, 3072 cores):
 
 ```
-$ bench/bench 5000000
+$ bin/bench 5000000
 Function: mul_lo, #elts: 5000e3
 fixnum digit  total data   time       Kops/s
  bits  bits     (MiB)    (seconds)

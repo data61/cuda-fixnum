@@ -1,13 +1,5 @@
-# Test input
-tests/add_*
-tests/sub_*
-tests/mul_*
-tests/modexp_*
-tests/paillier_*
-tests/test-suite
-
-# Benchmark
-bench/bench
+# Build
+build
 
 # Object files
 *.o
