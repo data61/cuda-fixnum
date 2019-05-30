@@ -20,12 +20,25 @@ string(REPLACE ";" " " CUDA_ARCH_FLAGS_SPACES "${CUDA_ARCH_FLAGS}")
 string(APPEND CMAKE_CUDA_FLAGS " ${CUDA_ARCH_FLAGS_SPACES}")
 string(APPEND CMAKE_CUDA_FLAGS " -Xcompiler -Wall,-Wextra")
 set(CMAKE_CUDA_FLAGS_DEBUG "-g -G")
-add_definitions(-DNDEBUG)
 
-# CODE
+# source
 include_directories(src)
-add_executable(bench bench/bench.cu)
-add_executable(check tests/test-suite.cu)
 
+# bench
+add_executable(bench bench/bench.cu)
 target_link_libraries(bench -lstdc++)
-target_link_libraries(check -lstdc++ -lgtest)
+
+# test-suite
+find_package(GTest)
+if(GTEST_FOUND)
+  add_executable(check tests/test-suite.cu)
+  target_link_libraries(check -lstdc++ -lgtest)
+  target_compile_definitions(check PUBLIC -DNDEBUG)
+else()
+  message(WARNING "GTest libraries not found - not building test-suite")
+endif()
+
+# FIXME: Add test runs
+# enable_testing()
+# add_test(NAME    mytest 
+#         COMMAND  mytest)
