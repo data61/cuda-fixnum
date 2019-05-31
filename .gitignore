@@ -3,9 +3,9 @@ build
 
 # Test input
 tests/add_*
-tests/sub_*	
-tests/mul_*	
-tests/modexp_*	
+tests/sub_*
+tests/mul_*
+tests/modexp_*
 tests/paillier_*
 
 # Object files
