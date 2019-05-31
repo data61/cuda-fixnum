@@ -26,6 +26,7 @@ include_directories(src)
 
 # bench
 add_executable(bench bench/bench.cu)
+target_compile_definitions(bench PUBLIC -DNDEBUG)
 target_link_libraries(bench -lstdc++)
 
 # test-suite
@@ -33,7 +34,6 @@ find_package(GTest)
 if(GTEST_FOUND)
   add_executable(check tests/test-suite.cu)
   target_link_libraries(check -lstdc++ -lgtest)
-  target_compile_definitions(check PUBLIC -DNDEBUG)
   target_compile_options(check PUBLIC -lineinfo)
 else()
   message(WARNING "GTest libraries not found - not building test-suite")
