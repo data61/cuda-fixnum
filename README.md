@@ -133,7 +133,9 @@ cmake ..
 make bench
 ```
 
-The build system for cuda-fixnum use CMake.  Create a working directory to build in and run cmake from there.  Then you can run `make bench` to build the benchmarking program, or `make check` to build and run the test suite. The test suite requires the [Google Test framework](https://github.com/google/googletest) to be installed.
+The build system for cuda-fixnum uses CMake.  Create a working directory to build in and run cmake from there.
+Then you can run `make bench` to build the benchmarking program, or `make check` to build and the test suite.
+The test suite requires the [Google Test framework](https://github.com/google/googletest) to be installed.
 
 CMake attempts to detect and set the proper flags for you GPU architecture, but you can override them or cross compile if needed.
 
