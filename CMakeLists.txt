@@ -1,11 +1,9 @@
-
-CMAKE_MINIMUM_REQUIRED(VERSION 3.8)
+cmake_minimum_required(VERSION 3.8)
 project(cuda-fixnum CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CUDA_STANDARD 11)
-
-SET(EXECUTABLE_OUTPUT_PATH "${PROJECT_BINARY_DIR}/bin")
+set(EXECUTABLE_OUTPUT_PATH "${PROJECT_BINARY_DIR}/bin")
 
 # CUDA
 find_package(CUDA REQUIRED)
@@ -33,7 +31,7 @@ target_link_libraries(bench -lstdc++)
 find_package(GTest)
 if(GTEST_FOUND)
   add_executable(check tests/test-suite.cu)
-  target_link_libraries(check -lstdc++ -lgtest)
+  target_link_libraries(check -lstdc++ -L${GTEST_INCLUDE_DIR} -lgtest)
   target_compile_options(check PUBLIC -lineinfo)
 else()
   message(WARNING "GTest libraries not found - not building test-suite")
@@ -43,3 +41,9 @@ endif()
 # enable_testing()
 # add_test(NAME    mytest 
 #         COMMAND  mytest)
+
+get_cmake_property(_variableNames VARIABLES)
+list (SORT _variableNames)
+foreach (_variableName ${_variableNames})
+    message(STATUS "${_variableName}=${${_variableName}}")
+endforeach()
