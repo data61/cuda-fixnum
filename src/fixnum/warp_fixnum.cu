@@ -172,7 +172,7 @@ public:
     }
 
     __device__ static int is_zero(fixnum a) {
-        return digit::is_zero(a);
+        return nonzero_mask(a) == 0;
     }
 
     __device__ static digit incr_cy(fixnum &r) {
@@ -395,7 +395,7 @@ public:
      * iff r is zero.
      */
     __device__ static uint32_t nonzero_mask(fixnum r) {
-        return layout::ballot( ! is_zero(r));
+        return layout::ballot( ! digit::is_zero(r));
     }
 
     /*

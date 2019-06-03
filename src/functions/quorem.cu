@@ -93,7 +93,7 @@ quorem<fixnum>::quorem_with_candidate_quotient(
     fixnum::sub_br(msw, t, msw, br);
     assert(digit::is_zero(t));  // msw >= br
     assert((L == 0 && digit::cmp(msw, 4) < 0)
-           || fixnum::is_zero(msw)); // msw < 4 (TODO: possibly should have msw < 3)
+           || digit::is_zero(msw)); // msw < 4 (TODO: possibly should have msw < 3)
     // Broadcast
     msw = fixnum::layout::shfl(msw, 0);
 

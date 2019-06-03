@@ -146,11 +146,25 @@ def generate_tests(nbytes, tests):
         'modexp': (modexp, xs, 3, 1, bits),
         'paillier_encrypt' : (paillier_encrypt, ps, 4, 1, bits)
     }
-    test_fns = { fn: ops[fn] for fn in ops.keys() & tests }
+    test_names = ops.keys() & tests if len(tests) > 0 else ops.keys()
+    test_fns = { fn: ops[fn] for fn in test_names }
     fnames = map(lambda fn: fn + '_' + str(nbytes), test_fns.keys())
     return list(map(write_tests, fnames, test_fns.values()))
 
+
+def print_usage(progname):
+    print("""Please specify the functions for which you want to generate test cases:
+
+    $ python3 {} <func_1> ... <func_n>
+
+where each <fn_i> is one of 'add_cy', 'sub_br', 'mul_wide', 'sqr_wide', 'modexp', 'paillier_encrypt'.
+Specifying no functions will generate all of them (you will need to do this at least once).""".format(progname))
+
+
 if __name__ == '__main__':
     import sys
-    for i in range(2, 9):
-        generate_tests(1 << i, sys.argv[1:])
+    if len(sys.argv[1:]) > 0 and sys.argv[1] == '-h':
+        print_usage(sys.argv[0])
+    else:
+        for i in range(2, 9):
+            generate_tests(1 << i, sys.argv[1:])
