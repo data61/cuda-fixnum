@@ -202,7 +202,7 @@ The main sources for the algorithms in this library are
  
 ## Author and licence
 
-The principal author of `cuda-fixnum` is Dr Hamish Ivey-Law (@unzvfu). Email: _hamish.ivey-law (at) data61.csiro.au_
+The principal author of `cuda-fixnum` is Dr Hamish Ivey-Law (@unzvfu). Email: _hamish (at) ivey-law.name_
 
 `cuda-fixnum` is copyright (c) Commonwealth Scientific and Industrial Research Organisation (CSIRO).
 
