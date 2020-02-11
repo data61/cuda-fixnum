@@ -1,6 +1,6 @@
 # cuda-fixnum
 
-**NB: This repository is no longer maintained. All future development on cuda-fixnum will take place at [unzvfu/cuda-fixnum](https://github.com/unzvfu/cuda-fixnum).**
+**NB: This repository is no longer maintained. All development on cuda-fixnum now takes place at [unzvfu/cuda-fixnum](https://github.com/unzvfu/cuda-fixnum).**
 
 `cuda-fixnum` is a fixed-precision SIMD library that targets CUDA. It provides the apparatus necessary to easily create efficient functions that operate on vectors of _n_-bit integers, where _n_ can be much larger than the size of a usual machine or device register.  Currently supported values of _n_ are 32, 64, 128, 256, 512, 1024, and 2048 (larger values will be possible in a forthcoming release).
 
