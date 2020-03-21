@@ -207,6 +207,6 @@ The main sources for the algorithms in this library are
 
 The principal author of `cuda-fixnum` is Dr Hamish Ivey-Law (@unzvfu). Email: _hamish (at) ivey-law.name_
 
-`cuda-fixnum` is copyright (c) Commonwealth Scientific and Industrial Research Organisation (CSIRO).
+`cuda-fixnum` is copyright (c) 2016-2018 Commonwealth Scientific and Industrial Research Organisation (CSIRO).
 
 `cuda-fixnum` is released under a modified MIT/BSD Open Source Licence (see [LICENCE](LICENCE) for details).
