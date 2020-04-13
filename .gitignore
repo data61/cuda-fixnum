@@ -1,3 +1,6 @@
+# Build
+build
+
 # Test input
 tests/add_*
 tests/sub_*
